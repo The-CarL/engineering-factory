@@ -14,6 +14,25 @@ Provider failures retain only a bounded HTTP status, allowlisted code, fixed rea
 
 After a failed/unknown creation result, the script performs a fresh read-only inventory and stops without cloning or repeating POST. A subsequent deliberate invocation starts with inventory again and reuses an exact visible repository. A hidden target remains ambiguous; absence from inventory is not proof of global availability. No delete/recreate recovery is provided. Cloning still uses official `gh repo clone`; failures retain the same conservative classifications without Git stderr or verbose HTTP tracing. Identity/REST success does not prove clone/push credential transport. Run the authorized real clone and push gates separately; do not substitute a personal login or broaden credentials to recover.
 
+### Explicit GitHub credential source
+
+`FACTORY_GITHUB_CREDENTIAL_SOURCE` is a non-secret selector, unset by default:
+
+| Mode | Child credential source |
+|---|---|
+| Unset or `cli` | Stock gh selection, including standard environment variables and approved CLI configuration. |
+| `factory-token` | Require `FACTORY_GITHUB_TOKEN`; map it to `GH_TOKEN` only in the provider subprocess environment. |
+
+An unknown mode or absent/blank namespaced binding fails before spawning either `gh api` or `gh repo clone`. Explicit mode removes competing `GITHUB_TOKEN` and enterprise-token variables; it never falls back to them. The original namespaced variable is not forwarded as an extra secret, the parent environment is unchanged, and values are never put in arguments, files or diagnostics. Both modes suppress Git/gh debug traces. Stock gh's documented [environment precedence](https://cli.github.com/manual/gh_help_environment) still applies in `cli` mode; an explicitly selected source must not be changed to escape a failure.
+
+Before selecting `factory-token` in Cloud, obtain authorization to configure a private `FACTORY_GITHUB_TOKEN` binding for the exact approved environment and GitHub API/Git domain recipients. Reuse the reviewed token/scope if appropriate; do not create a credential, change a binding or widen domains merely because this option exists. Configure only the non-secret selector as `factory-token`. This code does not modify a Cloud environment, vault, provider token or stored gh configuration. Native gh commands outside the factory helpers do not automatically understand the namespaced variable.
+
+Before another creation/push attempt, verify the selected source read-only through the same pinned executable and actual transport: approved identity/owner inventory, selector/binding name and safe provider metadata such as expiry where available. Keep those facts private; do not dump headers, token values or auth configuration. A mismatch between intended settings and observed metadata leaves the cause unresolved. A namespace change is a candidate source-isolation measure, not proof that a 403 is fixed; creation remains blocked until the real write gate passes.
+
+For normal authorized HTTPS Git pushes, the reviewed runner must pass `env=gh_environment()` from `scripts/lib/provider.py` to its subprocess, using the verified app checkout, exact origin and approved normal refspec. Use per-command Git settings `-c credential.https://github.com.helper=` followed by `-c 'credential.https://github.com.helper=!gh auth git-credential'` to select gh without persisting configuration or chaining another credential store. This follows [gh's authenticated Git command pattern](https://github.com/cli/cli/blob/trunk/git/client.go) and [Git's helper reset contract](https://git-scm.com/docs/gitcredentials). Capture/classify failures; do not run the credential helper directly or print its output. Do not use login, `auth setup-git`, a token URL, SSH or another credential store as a fallback. Review any existing Git authentication headers/helper settings before the operation, without exposing values.
+
+The selector controls the subprocess source; it does not prove Git's HTTPS/credential-helper or network-secret encoding behavior. API, clone and push need separate live transport evidence within the same approved recipients. Do not broaden token/domain scope or silently switch credentials when one path fails.
+
 ## Vercel read-only transport gates
 
 ```bash
@@ -55,6 +74,8 @@ Use the [S3 policy planner](s3-policy-plans.md) for a small exact-bucket/object 
 ## Recovery snapshots and deployed acceptance
 
 Preserve source bundles/archives, private inventories and a snapshot of operation evidence before changing a retained run. The helper hashes only explicitly selected files; it does not export, upload, encrypt, scan or grant durable storage. Use a private root directory (700), keep the manifest private (600), retain its digest independently, then copy artifacts to approved private durable storage and verify them again from the restored copy. Source bundles still require Git bundle/ref verification when restored. A local manifest alone is not durable recovery proof.
+
+A fresh Cloud actor may receive a workspace without prior task files. Before ending a run, push source to its authorized private Git origin or export source/history and private recovery artifacts to an approved durable destination, then verify restoration in a fresh location. A summary or a hash of a workspace-local bundle does not transfer those bytes. If push/export or restoration is unavailable, retain what can be preserved and report durable recovery as blocked; do not report completion from local hashes or assume a later actor inherits the filesystem.
 
 ```bash
 python3 scripts/recovery-manifest.py create \

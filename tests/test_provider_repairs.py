@@ -1,5 +1,6 @@
 """Behavior regressions for redaction, preview scoping, retry safety and recovery."""
 import copy
+from contextlib import redirect_stdout, redirect_stderr
 import importlib.util
 import io
 import json
@@ -15,7 +16,7 @@ import urllib.error
 
 SOURCE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SOURCE / "scripts/lib"))
-from provider import ProviderError, Vercel, diagnostic, NoRedirect
+from provider import ProviderError, Vercel, diagnostic, NoRedirect, gh_environment, gh, gh_clone
 
 spec = importlib.util.spec_from_file_location("preview", SOURCE / "scripts/vercel-preview.py")
 preview = importlib.util.module_from_spec(spec)
@@ -86,6 +87,88 @@ class DiagnosticTests(unittest.TestCase):
         self.assertIsNone(NoRedirect().redirect_request(None, None, 302, "x", {}, "https://hostile.invalid"))
         with self.assertRaises(ProviderError):
             api.request("GET", "https://hostile.invalid")
+
+
+class GitHubCredentialSourceTests(unittest.TestCase):
+    def test_default_and_explicit_cli_preserve_stock_sources(self):
+        original = {"GH_TOKEN": "stock-primary", "GITHUB_TOKEN": "stock-secondary",
+                    "FACTORY_GITHUB_TOKEN": "unused-namespaced", "GH_CONFIG_DIR": "/private/approved-gh",
+                    "GH_DEBUG": "api", "DEBUG": "1", "GIT_TRACE_CURL": "1"}
+        for mode in (None, "cli"):
+            values = dict(original)
+            if mode is not None:
+                values["FACTORY_GITHUB_CREDENTIAL_SOURCE"] = mode
+            with patch.dict(os.environ, values, clear=True):
+                child = gh_environment()
+                self.assertEqual(child["GH_TOKEN"], "stock-primary")
+                self.assertEqual(child["GITHUB_TOKEN"], "stock-secondary")
+                self.assertEqual(child["GH_CONFIG_DIR"], "/private/approved-gh")
+                self.assertNotIn("FACTORY_GITHUB_TOKEN", child)
+                for key in ("GH_DEBUG", "DEBUG", "GIT_TRACE_CURL"):
+                    self.assertNotIn(key, child)
+                self.assertEqual(os.environ["FACTORY_GITHUB_TOKEN"], "unused-namespaced")
+        with patch.dict(os.environ, {"FACTORY_GITHUB_TOKEN": "unused-namespaced"}, clear=True):
+            self.assertNotIn("GH_TOKEN", gh_environment())
+
+    def test_factory_mode_selects_only_namespaced_binding_without_parent_mutation(self):
+        selected = "ghp_" + "x" * 36
+        values = {"FACTORY_GITHUB_CREDENTIAL_SOURCE": "factory-token", "FACTORY_GITHUB_TOKEN": selected,
+                  "GH_TOKEN": "competing-primary", "GITHUB_TOKEN": "competing-secondary",
+                  "GH_ENTERPRISE_TOKEN": "competing-enterprise", "GITHUB_ENTERPRISE_TOKEN": "competing-enterprise-other"}
+        with patch.dict(os.environ, values, clear=True):
+            child = gh_environment()
+            self.assertEqual(child["GH_TOKEN"], selected)
+            self.assertEqual(list(child.values()).count(selected), 1)
+            for key in ("FACTORY_GITHUB_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"):
+                self.assertNotIn(key, child)
+            self.assertEqual(dict(os.environ), values)
+
+    def test_unknown_mode_or_missing_binding_stops_before_api_and_clone_spawn(self):
+        cases = [
+            {"FACTORY_GITHUB_CREDENTIAL_SOURCE": "private-invalid-mode"},
+            {"FACTORY_GITHUB_CREDENTIAL_SOURCE": "factory-token", "GH_TOKEN": "forbidden-fallback"},
+            {"FACTORY_GITHUB_CREDENTIAL_SOURCE": "factory-token", "FACTORY_GITHUB_TOKEN": "  ", "GITHUB_TOKEN": "forbidden-fallback"},
+        ]
+        for values in cases:
+            for operation in (lambda: gh(["user"]), lambda: gh_clone("owner/repo", "/private/clone")):
+                with patch.dict(os.environ, values, clear=True), patch("provider.subprocess.run") as spawn:
+                    with self.assertRaises(ProviderError) as caught:
+                        operation()
+                    spawn.assert_not_called()
+                    self.assertNotIn("private-invalid-mode", str(caught.exception))
+                    self.assertNotIn("forbidden-fallback", str(caught.exception))
+
+    def test_both_helpers_select_child_env_without_token_in_arguments_or_output(self):
+        selected = "ghp_" + "x" * 36
+        values = {"FACTORY_GITHUB_CREDENTIAL_SOURCE": "factory-token", "FACTORY_GITHUB_TOKEN": selected,
+                  "GH_TOKEN": "competing", "GITHUB_TOKEN": "other", "GH_DEBUG": "api", "DEBUG": "1",
+                  "GIT_TRACE": "/private/trace", "GIT_TRACE_CURL": "1", "GIT_CURL_VERBOSE": "1"}
+        stdout, stderr = io.StringIO(), io.StringIO()
+        result = subprocess.CompletedProcess([], 0, stdout=b"{}", stderr=b"")
+        with patch.dict(os.environ, values, clear=True), patch("provider.subprocess.run", return_value=result) as spawn:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                self.assertEqual(gh(["user"]), b"{}")
+                gh_clone("owner/repo", "/private/clone")
+            self.assertEqual(spawn.call_count, 2)
+            for call in spawn.call_args_list:
+                self.assertEqual(call.kwargs["env"]["GH_TOKEN"], selected)
+                for key in ("GH_DEBUG", "DEBUG", "GIT_TRACE", "GIT_TRACE_CURL", "GIT_CURL_VERBOSE", "GITHUB_TOKEN", "FACTORY_GITHUB_TOKEN"):
+                    self.assertNotIn(key, call.kwargs["env"])
+                self.assertNotIn(selected, " ".join(call.args[0]))
+            self.assertEqual(stdout.getvalue() + stderr.getvalue(), "")
+
+    def test_cli_failure_never_echoes_selected_or_competing_values(self):
+        selected = "ghp_" + "x" * 36
+        result = subprocess.CompletedProcess([], 1, stdout=b"", stderr=("bad credentials " + selected).encode())
+        with patch.dict(os.environ, {"FACTORY_GITHUB_CREDENTIAL_SOURCE": "factory-token", "FACTORY_GITHUB_TOKEN": selected,
+                                     "GH_TOKEN": "competing-primary", "GITHUB_TOKEN": "competing-secondary"}, clear=True):
+            with patch("provider.subprocess.run", return_value=result) as spawn:
+                with self.assertRaises(ProviderError) as caught:
+                    gh(["user"])
+                self.assertEqual(spawn.call_count, 1)
+        self.assertIn("credentials rejected", str(caught.exception))
+        for value in (selected, "competing-primary", "competing-secondary"):
+            self.assertNotIn(value, str(caught.exception))
 
 
 class FakeAPI:

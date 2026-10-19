@@ -71,9 +71,23 @@ def diagnostic(provider, status=None, headers=None, body=b"", stderr=b""):
 
 
 def gh_environment():
+    source = os.environ.get("FACTORY_GITHUB_CREDENTIAL_SOURCE", "cli")
+    if source not in ("cli", "factory-token"):
+        raise ProviderError("GitHub credential source must be cli or factory-token")
+    selected = None
+    if source == "factory-token":
+        selected = os.environ.get("FACTORY_GITHUB_TOKEN", "")
+        if not selected.strip():
+            raise ProviderError("FACTORY_GITHUB_TOKEN binding is required for factory-token mode")
     env = dict(os.environ, GH_HOST="github.com", GH_PROMPT_DISABLED="1", GIT_TERMINAL_PROMPT="0")
+    # The namespaced value is consumed here, never forwarded as an extra secret.
+    env.pop("FACTORY_GITHUB_TOKEN", None)
+    if selected is not None:
+        for key in ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"):
+            env.pop(key, None)
+        env["GH_TOKEN"] = selected
     for key in list(env):
-        if key.startswith("GIT_TRACE") or key in ("GH_DEBUG", "GIT_CURL_VERBOSE"):
+        if key.startswith("GIT_TRACE") or key in ("GH_DEBUG", "DEBUG", "GIT_CURL_VERBOSE"):
             del env[key]
     return env
 

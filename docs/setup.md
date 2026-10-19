@@ -29,6 +29,10 @@ The exact owner/repo confirmation is the caller's deliberate creation request. U
 
 Workspace owner/repo path components are canonicalized to lowercase because GitHub names are case-insensitive. Paths are anchored to the script's factory checkout, independent of current directory. Quote paths containing spaces. Run app Git commands from its printed checkout path; never from the factory root. Existing matching clones are verified but not pulled/reset. Clone failures remove only the temporary partial clone; a retry reuses the already created repo. Existing mismatched paths/origins/visibility and symlinks fail closed. A local per-repo lock prevents simultaneous script runs; inspect active processes and paths before manually removing a stale `.REPO.lock`. Do not run concurrent untrusted processes against these directories; path checks are operational safeguards, not an OS sandbox.
 
+### Optional namespaced GitHub binding
+
+The default remains stock gh credential selection. If an explicitly reviewed private Cloud binding uses `FACTORY_GITHUB_TOKEN`, set the non-secret `FACTORY_GITHUB_CREDENTIAL_SOURCE` to `factory-token` and use the factory helpers' selected child environment for API/clone and normal Git pushes. Missing bindings fail without fallback. Follow the [source selection contract](provider-workflows.md#explicit-github-credential-source) for exact environment/domain scope, read-only verification, per-command Git configuration and separate live transport gates. Changing the binding or credential source needs its own authorized scope; adding this option does not configure or certify it.
+
 ## Read-only provider checks (later, with approved identities)
 
 ```bash
