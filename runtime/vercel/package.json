@@ -1,0 +1,8 @@
+{
+  "name": "factory-runtime-tools",
+  "private": true,
+  "version": "1.0.0",
+  "dependencies": {
+    "vercel": "64.5.0"
+  }
+}

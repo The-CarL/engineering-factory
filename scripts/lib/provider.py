@@ -7,6 +7,12 @@ import urllib.error
 import urllib.request
 
 
+METADATA = ("factoryProjectId", "factoryEnvironment", "factoryOwner", "factoryManagedBy",
+            "factorySourceRepo", "factorySourceCommit", "factoryCreatedBy", "factoryCreatedAt",
+            "factoryCreationRunId", "factoryLastRunId", "factoryLastSourceCommit",
+            "factoryProvenanceVersion", "factoryExpiresAt")
+
+
 class ProviderError(Exception):
     """Contains only a fixed classification and allowlisted diagnostic fields."""
 

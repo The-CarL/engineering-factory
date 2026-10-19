@@ -62,6 +62,8 @@ These checks do not verify repo creation/push, project deployment, service permi
 
 ## Runtime source and release acceptance
 
+The shipped [runtime installer/startup and provider launchers](runtime-commands.md) define a Linux x86_64 prepared-host release. They install pinned provider tools without retained credentials and expose general AWS role-only reads/writes and trusted exec, explicit GitHub/Git credential selection and Vercel REST operations. Use its names-only private configuration and actual setup/start entries; this does not configure or publish Cloud automatically. Existing environments must accept the reviewed source/tool release and live grants/transports separately.
+
 Follow [runtime standards](../standards/runtime.md) for generic installer/wrapper/check source in Git, private target configuration, pinned artifacts and a retained-files manifest. State whether the release needs a prepared snapshot or supports empty-image bootstrap; prove retained dependencies, integrity and startup in a fresh task. Track the selected provider transports, real CLI/API contracts and effective permissions separately; dated regression evidence and mocked preflight results do not certify another installation.
 
 ## Codex Cloud gate (not performed by foundation setup)

@@ -15,12 +15,8 @@ import subprocess
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
-from provider import ProviderError, Vercel, diagnostic  # noqa: E402
+from provider import METADATA, ProviderError, Vercel, diagnostic  # noqa: E402
 
-METADATA = ("factoryProjectId", "factoryEnvironment", "factoryOwner", "factoryManagedBy",
-            "factorySourceRepo", "factorySourceCommit", "factoryCreatedBy", "factoryCreatedAt",
-            "factoryCreationRunId", "factoryLastRunId", "factoryLastSourceCommit",
-            "factoryProvenanceVersion", "factoryExpiresAt")
 PROTECTED = {"all", "all_except_custom_domains", "preview", "prod_deployment_urls_and_all_previews"}
 
 
