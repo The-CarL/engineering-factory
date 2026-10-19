@@ -1,6 +1,6 @@
 # Factory operating instructions
 
-This public repository is an engineering harness, not an application generator. It is intended to anchor one reusable Codex Cloud environment serving many independent repositories. That Cloud design remains unverified until the mobile acceptance tests pass.
+This public repository is a reusable engineering harness for net-new frontend + real backend projects in independent repositories, anchored by one Codex Cloud environment. Follow the [new-project workflow](docs/new-project.md) and [full-stack standard](standards/full-stack.md); actual environment and deployed continuation acceptance remain unverified until evidenced.
 
 ## Before working
 
@@ -14,6 +14,7 @@ This public repository is an engineering harness, not an application generator. 
 - Use separate clones under `workspaces/OWNER/REPO` for independent applications. Never commit app source, provider state, credentials, or generated deployments into the factory. Never point an app's origin at the factory.
 - Use a feature branch/worktree for factory changes. Keep changes reviewable; search for the target repository's PR template. Respect branch protections; do not merge without authorization.
 - For every infrastructure or Vercel change, follow [project ownership and provenance](standards/provenance.md): stable project/environment ID, source/run/actor attribution, supported creation tags or reviewed exceptions, and private resource inventory/readback. Missing attribution fails deployment acceptance. Preserve original creation history and reconcile partial outcomes.
+- For a net-new app, use the local instruction seeder only after verifying its independent clone/target; it adds shared rules and an app-owned engineering contract, not app or CI code. Integrate existing differing instructions deliberately. Implement the actual frontend/server/CI/deployment contract in the app repository.
 - Choose the smallest suitable stack; pin dependencies/tool versions and commit lockfiles where applicable. Follow the target repo's conventions rather than imposing a universal stack.
 - Follow [runtime standards](standards/runtime.md) for versioned generic setup/wrapper source, private target configuration, actual credential transport, real CLI contracts, fresh-task integrity and environment release/recovery evidence. Documentation does not certify the current runtime.
 - Run the relevant checks. For this factory, use `make check`; authentication is unnecessary for tests. Report failed or skipped checks and explain their impact. Avoid tests that merely restate code.

@@ -1,29 +1,28 @@
-# Mobile acceptance workflow
+# Phone operation and fresh-task continuation
 
-These are future acceptance tests after reviewed foundation, approved credentials, and published environment. Phase 3 includes GitHub, Vercel and AWS identity preparation/validation, with live writes gated separately. No live writes are part of `make check`. Keep brief redacted evidence in the task or app record: environment version, target alias, source commit, PR/check status, deployment URL/status, observed behavior, and recovery outcome. Do not put raw tokens, account IDs, or provider diagnostics in the factory.
+Use the same permanent factory environment for each independent frontend/backend project. Follow [Build a new project](new-project.md) and its one project prompt; a phone request does not need a manual chat handoff. Record actual evidence privately and distinguish the factory's offline checks from app CI, deployment and durable continuation. Do not publish provider IDs, raw diagnostics or credentials in the factory.
 
-## First phone task
+## First project task
 
-1. From the phone, start a new Codex Cloud task in the single factory-linked environment. Confirm published setup, tool versions, auth/approved targets, provider permissions and cost bounds. Connector success and a local browser session are insufficient.
-2. Establish the private stable project/environment record, source/run identity and [provenance inventory](../standards/provenance.md). Plan an explicitly approved independent **private** app repo; run `create-repo.sh OWNER/REPO --dry-run`, then the confirmed creation. Check the printed independent checkout/origin. Verify Cloud can access the separate clone and necessary GitHub/Vercel endpoints.
-3. Follow app instructions and relevant factory standards. Build a minimal app with meaningful tests; commit only in its own repo, push a branch, and open its PR. Ensure app-owned CI is independent of factory secrets.
-4. Link/configure only the approved Vercel sandbox project under deliberate authorization. In the app directory inspect its resolved project/team; stop on missing/mismatched links. Deploy an authorized preview with the required metadata or verified equivalent mapping for that deployment path; verify exact project/deployment IDs, project/environment/source/run attribution, HTTPS response and expected app behavior. Reconcile the private inventory before acceptance.
-5. Record the result and known limits. Do not promote production, add domains/DNS, change billing, or provision AWS implicitly.
+1. Select the existing factory environment and verify its recorded publication/runtime, tool/credential transport and exact approved targets. Prepare one concrete scope covering repo, real frontend/backend requirements, chosen deployment/profile, initial release/protection/public exposure, budget and recovery. Reuse prior exact authorization; actual action-time controls still apply.
+2. Create/clone the approved independent private repo with the factory scripts and verify origin/visibility. Seed its local agent/engineering instructions with the reviewed committed helper; integrate existing instructions deliberately on collision.
+3. Build the requested frontend and real server/API backend in that app. Choose suitable hosting/persistence/auth, implement actual app commands and meaningful server/browser tests, normal-push source and verify independent app CI.
+4. Implement the agreed provider deployment path. The preview helper does not create a new Vercel project or establish its first production baseline. Include first-release/protection scope initially; AWS writes need a reviewed project profile and actual service permissions.
+5. Verify deployed browser → API → processing/data → visible response, errors/auth and required durability. Check source compatibility, exact deployment/protection and private provenance/inventory. Verify the actual browser mechanism available in the task/phone instead of assuming local Chrome configuration proves Cloud browser execution.
+6. Push source or export privately and prove restoration before ending. Retain actual CI/health/recovery results and blockers; a workspace-local bundle/hash or a login page is insufficient.
 
-## Second phone task
+## Later task on the same app
 
-1. Start a separate new task using the **same** published factory environment. Do not assume previous VM workspaces survive.
-2. Use the exact saved repo identity with `clone-repo.sh OWNER/REPO`; verify private-repo access, isolated origin/path and applicable app instructions.
-3. Make a small visible change, run app checks, push a PR/change under the app's workflow, and verify the preview/redeployment reflects the new source commit over HTTPS, retains the same stable project identity, and has its new operation/source metadata and private event recorded. Preserve original creation attribution for existing resources.
-4. Confirm both tasks worked without creating a new Cloud environment or copying secrets between repos. A browser/computer automation step is not a supported Cloud capability today; use deployment/API/HTTP checks available to the task and phone.
+1. Use the same factory environment. Expect a fresh VM/actor and do not rely on prior workspace files.
+2. Clone the exact saved app with `clone-repo.sh`; verify independent origin/visibility, local AGENTS/CLAUDE/ENGINEERING and the app's actual commands. Restore approved private configuration through its established mechanism, without copying factory execution credentials into app source/CI.
+3. Reconcile existing deployments/resources and source/config versions from private inventory. Make the requested app change, run its checks, normal-push and verify actual app CI and the redeployed frontend/backend flow.
+4. Preserve stable project identity and original creation attribution. Record current run/source metadata, recovery proof and limitations. A new factory environment or another chat is not a prerequisite.
 
-## Recovery proof
+## Recovery acceptance
 
-- Repeat create/clone for the same repo and visibility: no duplicate repo, no changed origin, no reset/pull of existing files. Check dirty local work remains intact.
-- Interrupt/fail cloning after creation, then retry the exact target: remote repo is reused and partial local clones are removed. In a real test use a controlled local failure; do not revoke broad accounts or induce destructive outages.
-- For deployment timeout, inspect exact project/deployment IDs, metadata, child resources and private operation records before retrying; demonstrate no duplicate project or unintended production deployment. Repository retry safety does not prove deployment retry safety.
-- Record cleanup ownership and expiry of any test resources. Cleanup itself must remain within the approved deletion scope.
+- Retry exact create/clone without a duplicate repo, changed origin or reset/pull of dirty files. Preserve existing app/user work.
+- For deployment failures/timeouts, reconcile intent, exact IDs/source/provenance and state before any further mutation. Repository retry safety does not prove deployment retry safety.
+- Restore durable source in a fresh location, verify commit/history as required and run app commands. A task summary without source transfer is not recovery.
+- Keep cleanup ownership/expiry and actual costs in private records. Cleanup needs its explicit scope; never damage core assets to test denied behavior.
 
-## Optional AWS proof
-
-AWS identity and effective-policy validation belong to Phase 3. A service-specific deployment proof can follow the GitHub/Vercel phone workflow. Separately approve the bounded factory role in the existing account, region/services/protected inventory and small IaC plan. Verify effective scope with simulation and authorized disposable controls, cost limits, private state, mandatory provenance/readback, health, rollback/retry and cleanup ownership. Do not test denials by mutating core assets. DNS and any cleanup remain separate authorized scopes.
+AWS or any separate backend proof is part of the selected product workload. Apply the reviewed role/service/resource/IaC profile, limits, provenance and real data-path checks when authorized. Identity reads do not prove that deployment works.

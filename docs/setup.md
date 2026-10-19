@@ -1,5 +1,7 @@
 # Setup
 
+For net-new frontend + real backend work, start with [Build a new project](new-project.md). This page prepares the factory tools and independent repo/instruction workflow; app code, commands, CI/CD and reviewed deployment are agent-owned work in that app.
+
 ## Local foundation checks (no provider credentials)
 
 Prerequisites: Bash 3.2+, Git, Python 3.9+, curl, tar, and make. The tool installer supports macOS arm64 and Linux x86_64; it downloads official ShellCheck 0.10.0 and Gitleaks 8.24.3 binaries, verifies reviewed SHA256 hashes, and installs only into ignored `.cache/tools`. It never installs global tools. Unsupported platforms fail explicitly and need a reviewed checksum entry.
@@ -32,6 +34,17 @@ Workspace owner/repo path components are canonicalized to lowercase because GitH
 ### Optional namespaced GitHub binding
 
 The default remains stock gh credential selection. If an explicitly reviewed private Cloud binding uses `FACTORY_GITHUB_TOKEN`, set the non-secret `FACTORY_GITHUB_CREDENTIAL_SOURCE` to `factory-token` and use the factory helpers' selected child environment for API/clone and normal Git pushes. Missing bindings fail without fallback. Follow the [source selection contract](provider-workflows.md#explicit-github-credential-source) for exact environment/domain scope, read-only verification, per-command Git configuration and separate live transport gates. Changing the binding or credential source needs its own authorized scope; adding this option does not configure or certify it.
+
+## Seed local app instructions
+
+After creating/cloning an independent app, use reviewed committed factory source:
+
+```bash
+python3 scripts/seed-project.py --app /absolute/canonical/app-path --repo approved-owner/my-app --dry-run
+python3 scripts/seed-project.py --app /absolute/canonical/app-path --repo approved-owner/my-app --confirm approved-owner/my-app
+```
+
+This local-only helper verifies a standalone Git root, exact safe fetch/push origins and the committed helper/template/full-stack source before writing only AGENTS.md, CLAUDE.md and ENGINEERING.md. Existing matching files are unchanged; any differing output stops all seeding for deliberate integration. It does not generate app code, commands, CI or deploy tooling, execute hooks, authenticate or call a provider. The local rules work in an independent clone and include pinned factory references for both agents. See [the project workflow](new-project.md#workflow) for the app-owned steps and current readiness gates.
 
 ## Read-only provider checks (later, with approved identities)
 

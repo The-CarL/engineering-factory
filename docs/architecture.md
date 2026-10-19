@@ -1,33 +1,32 @@
 # Architecture
 
-The factory is a public, reusable engineering harness: instructions, standards, safe repository scripts, and credential-free validation. The intended operating model is **one permanent Codex Cloud environment rooted in this repository and many independent app repositories**.
+One permanent factory environment supports many independent frontend/backend repositories. Start with the [new-project workflow](new-project.md): each request chooses a suitable app stack and real server/API boundary, then owns its implementation, tests, CI/CD, deployment and later continuation.
 
 ```text
-Phone -> Codex Cloud task -> factory instructions + tools
-                               |
-                               +-> workspaces/OWNER/APP-A -> independent GitHub repo -> app-owned CI/CD
-                               +-> workspaces/OWNER/APP-B -> independent GitHub repo -> app-owned CI/CD
-Private execution identity ----+    (explicitly approved provider targets)
+Phone or desktop -> task in the reusable factory environment
+                      |
+                      +-> independent app A repo -> frontend -> real API/server -> data/response
+                      |     app-owned CI/CD       compatible deployment targets
+                      +-> independent app B repo -> its own stack, CI/CD and targets
+Private approved execution identities -> exact operations / provider boundaries
 ```
 
-The diagram is a target design, not evidence that Cloud permits every required filesystem/network/credential operation. A published environment provides the reusable setup; each task runs in an isolated VM. Cloud's prepared filesystem snapshot/repository refresh does not imply runtime workspaces survive between tasks, or that installation reruns for each task. The second-task proof therefore reclones the app by exact GitHub identity.
+The public factory holds shared standards, instruction templates and focused helpers. Repository creation/cloning checks targets and origins; local seeding adds only three instruction/contract files with usable shared rules and a pinned factory revision. It generates no app or CI code. The agent performs app-owned implementation and reviewed CLI/API/IaC work under the initial scope. The Vercel REST helper performs authorized previews only after its production-baseline guard; the app agent performs project creation/protection/first release through the documented official provider path.
 
-The factory never stores application source or credentials in its history. Apps have independent origins, branches, CI, deployment configuration, and resource ownership. Scripts place apps in ignored `workspaces/OWNER/REPO`; they never commit, push, modify visibility, reset, or update existing checkouts. Repository creation is explicit, private by default, and recoverable if cloning fails.
+Apps use independent origins and ignored `workspaces/OWNER/REPO` clones. The factory never holds application source, credentials or private inventories. Codex/Claude receive the app's local AGENTS/CLAUDE/ENGINEERING rules through deliberate [instruction seeding](new-project.md#workflow), not automatic ancestry. Each client still needs its own installation/authentication/instruction-loading proof.
 
-Trust boundaries are public source; task execution; private credential/vault injection; GitHub ownership/repository permissions; Vercel team/project; AWS role/account/region; and app CI/CD. Authentication at one boundary does not grant another. GitHub connectors do not sign in `gh`, and Vercel/AWS connectors do not populate Cloud CLI credentials.
+Choose backend hosting for the product. Framework-native server endpoints can keep frontend/API together when suitable; a separate backend, persistence or AWS requires a reason and actual supported deployment/profile. AWS credentials and read-only identity checks do not implement backend provisioning. A full-stack request is accepted only after the real browser → API → data/response flow works with compatible source/configuration.
 
-## Ownership and execution boundaries
+## Execution and ownership boundaries
 
-Phase 3 prepares GitHub, Vercel and AWS identities. AWS uses dedicated bounded factory role(s) in the existing account, with explicit protected-resource exclusions; a separate AWS account is not assumed. GitHub runtime writes exclude core repositories, and Vercel project/team scope must exclude core projects. Provisioning and ongoing work may use different identities. The [access matrix](access-matrix.md) distinguishes intended policy from controls still awaiting configuration and proof.
+Public source, task execution, private credential injection, GitHub owner/repository, Vercel team/project, AWS role/account/region and app CI/CD are separate trust domains. Connectors do not authenticate Cloud CLIs. Task operations must exclude core/unrelated assets; intended provider policies should enforce that boundary. Actual token access can be broader, and must be recorded in private reviewed [access exceptions](../standards/security.md#access-exceptions), not described as hard isolation from names, tags or no-delete flags.
 
-Every managed object belongs to one stable project/environment. A private project record maps that identity to exact provider resources, repository and deployment IDs. The [provenance standard](../standards/provenance.md) defines AWS tags, Vercel deployment metadata, creation/source/run attribution and append-only operation events. Preserve original creation history; verify child resources and native Git deployment paths explicitly. The public factory stores the schema, never the private inventory. Provenance supports ownership and recovery; provider policies enforce the boundary.
+AWS uses reviewed bounded roles in the existing account when selected; separate-account access is not assumed. Every selected service/action/resource/region/IaC profile needs actual validation. Use the [access matrix](access-matrix.md), [infrastructure](../standards/infrastructure.md) and [bounded scope](../standards/bounded-runs.md). Accept the selected backend through its deployed data path.
 
-[Runtime standards](../standards/runtime.md) extend provenance to environment installers, wrappers, retained dependencies and published snapshots. Generic reviewed source belongs in Git; private targets and release evidence remain outside it. Record snapshot dependence versus empty-image bootstrap. Save, publish and fresh-instance acceptance are distinct; reconcile pending jobs and preserve the last confirmed release.
+A private project record maps stable identity to exact repo/provider/deployment IDs. [Provenance](../standards/provenance.md) records creation/current source/run attribution and child resources; metadata is not an IAM boundary. Apps own CI/CD and its credential design independently of the factory's execution credentials.
 
-[Codex and Claude Code](agent-compatibility.md) share the factory's `AGENTS.md` through a thin Claude import. Each client still needs its own reviewed host configuration and instruction-loading proof. Independent app clones use their own instructions and conventions; the factory does not automatically become their instruction ancestor.
+## Runtime, continuation and evidence
 
-This is a harness, not a universal app generator. Stack choice and app scaffolding follow each task. Provider-specific provisioning stays outside the initial scripts until scopes and acceptance evidence exist.
+A published factory environment is reusable setup, not durable app storage. A fresh task/actor may receive a fresh VM; installation/snapshots do not prove old workspaces survive. Make source durable via authorized Git push/private export and verify restoration. A later task uses the same environment, reclones the exact app, reads its local operating contract and reconciles private deployment/recovery references. No compulsory other-chat handoff or per-app environment is needed.
 
-## Verification state
-
-Repository checks establish local/mock behavior only. Track actual environment publication/fresh-task readiness, credential transport, provider CLI/API reads, effective permissions, write/deployment proof and second-task mobile/recovery acceptance independently in private release evidence. Read-only success cannot complete the later gates. These public documents do not publish a live environment status or certify either agent CLI. AWS same-account identity preparation and permission validation are part of Phase 3; a service-specific deployment proof is separately selected and authorized. See [setup](setup.md), [credential gate](credential-checklist.md), and [mobile acceptance](mobile-workflow.md).
+[Runtime standards](../standards/runtime.md) distinguish save/publication/fresh-instance acceptance and retain source/hash/release evidence. Local/mock tests prove only their reported behavior. Verify each installation's GitHub creation/clone/push credential source, actual Vercel transport and [new-project/initial-release execution](provider-workflows.md#new-vercel-project-and-initial-release), and any selected AWS service write profile. Keep operator-specific failures private. Independently verify app CI, deployed full-stack behavior, private inventory and fresh-task continuation before claiming readiness. See [setup](setup.md) and [mobile acceptance](mobile-workflow.md).

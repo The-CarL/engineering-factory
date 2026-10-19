@@ -1,17 +1,21 @@
 # Engineering factory
 
-A public engineering harness for one reusable Codex Cloud environment and many independent repositories, operated from a phone. It provides instructions, standards, safe repository workflows, and credential-free CI. Apps own their source and deployments; the factory is not a universal app generator.
+Use one reusable Codex Cloud environment to build and continue independent **frontend + real backend** projects. This public factory supplies operating instructions, standards and focused helpers; each app owns its source, stack, commands, CI/CD and deployments. It does not generate a universal sample application.
 
-## Start here
+Start with [Build a new project](docs/new-project.md), including its copyable project prompt, and the [full-stack contract](standards/full-stack.md). Agree one concrete initial scope, then execute routine create/clone/develop/push/CI/deploy/verify steps without repeated prompts or a compulsory chat handoff.
 
-- [Architecture and current verification state](docs/architecture.md)
-- [Local setup and repository scripts](docs/setup.md)
-- [Security model](docs/security-model.md) and [provider access design](docs/access-matrix.md)
-- [Mandatory project ownership and provenance](standards/provenance.md)
-- [Reusable runtime, credential transport and release acceptance](standards/runtime.md)
-- [Credential and Cloud readiness gate](docs/credential-checklist.md)
-- [Phone-only acceptance tests](docs/mobile-workflow.md)
-- [Shared agent instructions](AGENTS.md), [Codex/Claude Code compatibility](docs/agent-compatibility.md) and [engineering standards](standards/software-quality.md)
+## What is shipped
+
+| Capability | Helper / ownership |
+|---|---|
+| Private GitHub creation and independent clone | `create-repo.sh` / `clone-repo.sh`: explicit target, inventory/origin/visibility checks and recovery; offline dry-run available. |
+| Shared app instructions | `seed-project.py`: only AGENTS.md, CLAUDE.md and ENGINEERING.md in a verified independent clone; preserves differing user files. |
+| Provider identity checks and GitHub source selection | `preflight.sh` and reviewed transport helpers; reads do not prove create/push/deploy permissions. |
+| Vercel REST preview | `vercel-preview.py`: authorized deployment POST/poll with exact protected project, verified READY production baseline, source and provenance guards. It does not create/link a new project or perform its first release. |
+| Private recovery integrity | `recovery-manifest.py`: hashes/verification for selected files; no durable export or restore is performed for you. |
+| App implementation and CI/CD | Agent-owned work in the app repo: suitable frontend/server stack, meaningful commands/tests, actual app CI and reviewed provider CLI/API/IaC deployment. |
+
+Apps live in separate ignored `workspaces/OWNER/REPO` clones with their own origins. No app source, private provider inventory, credential values or generated deployments belong in the factory. All infrastructure/Vercel work requires stable project/source/run provenance and private readback.
 
 ```bash
 ./scripts/install-check-tools.sh
@@ -19,10 +23,13 @@ make check
 ./scripts/preflight.sh --offline
 ```
 
-Validation needs no GitHub, Vercel, or AWS credentials. Tool downloads use official releases and pinned SHA256 hashes. See setup for supported platforms and prerequisites.
+Factory checks require no provider credentials and establish offline behavior only. Accept each environment's actual GitHub create/clone/push credential transport, Vercel CLI/API path and initial release, and any selected AWS write profile separately. Follow the [new Vercel project contract](docs/provider-workflows.md#new-vercel-project-and-initial-release) through official tools; the narrower preview helper does not automate that path. Reusable Cloud operation, app CI/deployed full-stack behavior and fresh-task continuation require real evidence recorded privately; installing credentials does not select a backend service.
 
-Repository creation defaults to private and requires an explicit owner/repo confirmation. Clones live in ignored `workspaces/OWNER/REPO`, with origin/visibility checks and safe retry. `--dry-run` is an offline plan with no provider calls or writes.
+## Operating references
 
-The foundation does not create credentials, Cloud environments, infrastructure, or deployments. **Runtime releases, provider capabilities and the two-task phone workflow require separate acceptance evidence**; local checks do not establish them. Phase 3 prepares GitHub, Vercel and same-account bounded AWS identities. All infrastructure and Vercel work requires stable project identity, source/run metadata and private inventory. Public code contains configuration names only; private identities and provider-enforced boundaries belong outside Git.
+- [Setup and local helpers](docs/setup.md), [architecture](docs/architecture.md) and [phone continuation](docs/mobile-workflow.md)
+- [Bounded runs](standards/bounded-runs.md), [provider contracts](docs/provider-workflows.md) and [runtime acceptance](standards/runtime.md)
+- [Security model](docs/security-model.md), [provider access design](docs/access-matrix.md) and [credential gate](docs/credential-checklist.md)
+- [Project ownership/provenance](standards/provenance.md), [shared agent rules](AGENTS.md) and [Codex/Claude compatibility](docs/agent-compatibility.md)
 
 Licensed under [MIT](LICENSE).

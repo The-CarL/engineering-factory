@@ -1,0 +1,31 @@
+# Engineering contract
+
+Repository: `{{repository}}`
+
+Verified origin: `{{origin}}`
+
+Factory source: [{{revision}}]({{factory_url}}/tree/{{revision}})
+
+The operating rules in `AGENTS.md` are available locally to both agents. The factory references below are pinned to this seed's source revision; they do not imply automatic inheritance or deployed acceptance.
+
+## App-owned decisions to complete
+
+- Product flow and acceptance: describe the real frontend interaction, server request, processing/data behavior and visible response; distinguish local and deployed proof.
+- Architecture: choose runtime/framework, frontend/server boundaries, API request/response/error schemas and compatibility. Add persistence only when required, with migration/restore behavior if used.
+- Security/configuration: document server-only secret names, public configuration, required auth/authorization and validation boundaries. Actual values and provider targets stay private.
+- Commands: document actual install, development, tests, typecheck, build and browser verification commands; implement them with pinned versions/lockfiles and app-owned CI. This seed does not implement commands or CI.
+- Deploy/resume: document agreed targets, reviewed deployment/protection/bootstrap path, compatible frontend/backend source versions, health checks, rollback, private inventory/recovery references and how a fresh task clones and resumes this repo.
+
+## Shared full-stack rules
+
+A full-stack app includes real server execution used by the frontend. Validate requests on the server, constrain errors, and keep privileged data/credentials out of browser bundles. Authorization belongs at the server boundary when required. Test successful and invalid requests plus the actual browser → API → data/response path; verify persistence across requests/restarts only when persistence is part of the requirements.
+
+Use the smallest suitable supported architecture, including framework-native server endpoints when appropriate. AWS is a deployment choice requiring a project-specific reviewed role/IaC profile. Record actual app checks, CI status, source/deployment identity and deployed behavior; tool installation, local mocks and provider identity reads do not prove the flow works.
+
+## Pinned factory references
+
+- [Full-stack standard]({{factory_url}}/blob/{{revision}}/standards/full-stack.md)
+- [Testing]({{factory_url}}/blob/{{revision}}/standards/testing.md) and [software quality]({{factory_url}}/blob/{{revision}}/standards/software-quality.md)
+- [Security]({{factory_url}}/blob/{{revision}}/standards/security.md) and [infrastructure]({{factory_url}}/blob/{{revision}}/standards/infrastructure.md)
+- [Deployment]({{factory_url}}/blob/{{revision}}/standards/deployment.md) and [provenance]({{factory_url}}/blob/{{revision}}/standards/provenance.md)
+- [Bounded runs]({{factory_url}}/blob/{{revision}}/standards/bounded-runs.md) and [provider workflow contracts]({{factory_url}}/blob/{{revision}}/docs/provider-workflows.md)
