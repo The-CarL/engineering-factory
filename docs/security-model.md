@@ -4,9 +4,15 @@
 
 This repo may be read or forked publicly. It contains no live accounts, credentials, state, or private endpoints. Configuration names are public; their values and provider permissions live outside Git. Ignore rules, scanner checks, and instructions reduce mistakes but cannot enforce least privilege on a process holding broad credentials.
 
-Use provider-enforced scopes and dedicated sandbox targets. Verify an exact GitHub owner, Vercel team/project, AWS role/account/region, allowed operations, expiry, budget, revocation owner, and rollback before any write. Record redacted evidence rather than raw auth diagnostics. Secrets must not appear in command arguments, logs, tests, PRs, artifacts, or shell tracing. Untrusted repository code must not run with an identity more powerful than its approved task.
+Use provider-enforced scopes and exact approved targets; AWS uses bounded factory roles in the existing account, with protected core assets excluded. GitHub core content and Vercel core projects must also be outside runtime write scope. The [access matrix](access-matrix.md) documents unresolved scope choices and required effective-policy tests. Verify an exact GitHub owner, Vercel team/project, AWS role/account/region, allowed operations, expiry, budget, revocation owner, and rollback before any write. Record redacted evidence rather than raw auth diagnostics. Secrets must not appear in command arguments, logs, tests, PRs, artifacts, or shell tracing. Untrusted repository code must not run with an identity more powerful than its approved task.
 
 Actions runs on pull requests and pushes with `contents: read`, credential persistence disabled, and no cloud/admin secrets. The required job performs lint, tests, policy checks, and content-aware scanning of source/history; full SHA-pinned GitHub-owned checkout and hash-pinned binaries avoid a third-party action allowlist dependency. Review changes to control-plane files and scanner configuration carefully; repository administrators ultimately control enforcement.
+
+## Attribution and shared-account protection
+
+The [provenance standard](../standards/provenance.md) requires stable project/environment IDs, supported creation tags/deployment metadata, exact source/run attribution and private append-only inventory events. Preserve original history and record all created/changed objects, child/untaggable exceptions and cleanup ownership. Tags identify assets; they do not alone authorize mutation. Protect ownership tags from change and prohibit claiming core assets through retagging.
+
+AWS permissions must cover direct and indirect execution, prevent self-escalation and exclude account controls. GitHub repository deletion restrictions do not prevent file removal through commits. Vercel team tokens cover all team projects; project scoping is not a guarantee of deployment-only access. No policy or token has been created or validated by these documents.
 
 ## Administrative verification snapshot
 

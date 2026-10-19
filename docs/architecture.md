@@ -16,8 +16,14 @@ The factory never stores application source or credentials in its history. Apps 
 
 Trust boundaries are public source; task execution; private credential/vault injection; GitHub ownership/repository permissions; Vercel team/project; AWS role/account/region; and app CI/CD. Authentication at one boundary does not grant another. GitHub connectors do not sign in `gh`, and Vercel/AWS connectors do not populate Cloud CLI credentials.
 
+## Ownership and execution boundaries
+
+Phase 3 prepares GitHub, Vercel and AWS identities. AWS uses dedicated bounded factory role(s) in the existing account, with explicit protected-resource exclusions; a separate AWS account is not assumed. GitHub runtime writes exclude core repositories, and Vercel project/team scope must exclude core projects. Provisioning and ongoing work may use different identities. The [access matrix](access-matrix.md) distinguishes intended policy from controls still awaiting configuration and proof.
+
+Every managed object belongs to one stable project/environment. A private project record maps that identity to exact provider resources, repository and deployment IDs. The [provenance standard](../standards/provenance.md) defines AWS tags, Vercel deployment metadata, creation/source/run attribution and append-only operation events. Preserve original creation history; verify child resources and native Git deployment paths explicitly. The public factory stores the schema, never the private inventory. Provenance supports ownership and recovery; provider policies enforce the boundary.
+
 This is a harness, not a universal app generator. Stack choice and app scaffolding follow each task. Provider-specific provisioning stays outside the initial scripts until scopes and acceptance evidence exist.
 
 ## Verification state
 
-The foundation adds local/mock validation. Cloud environment creation, credential mechanism compatibility, live repository creation permissions, live CLI target checks, Vercel deployment, second-task mobile continuation, and recovery proof remain **unverified**. AWS is an optional later proof. See [setup](setup.md), [credential gate](credential-checklist.md), and [mobile acceptance](mobile-workflow.md).
+The foundation adds local/mock validation. Cloud environment creation, credential mechanism compatibility, live repository creation permissions, live CLI target checks, Vercel deployment, second-task mobile continuation, and recovery proof remain **unverified**. AWS same-account identity preparation and permission validation are part of Phase 3; a service-specific deployment proof is separately selected and authorized. See [setup](setup.md), [credential gate](credential-checklist.md), and [mobile acceptance](mobile-workflow.md).
