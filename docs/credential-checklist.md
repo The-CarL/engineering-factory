@@ -1,16 +1,22 @@
 # Credential and environment readiness gate
 
-**Stop here after the foundation PR is reviewed. No credentials, Cloud environment, live repos, or deployments are created by this checklist.** Proceed only when the user authorizes the concrete targets/operations. GitHub/Vercel go first; AWS can wait.
+**No credentials, Cloud environment, live repositories or deployments are created by this checklist.** Phase 3 includes GitHub, Vercel and AWS identity preparation. Proceed only when concrete private targets, effective permissions and operations are approved. The [access matrix](access-matrix.md) is the proposed boundary, not a configured control.
 
 ## Decisions to record privately before issuance
 
 | Provider | Required decisions/config names | Scope and proof |
 |---|---|---|
-| GitHub | `FACTORY_GITHUB_OWNER`; automation identity; repository naming policy; private default | Approved owner only; create/push/PR permissions actually required; determine GitHub App/fine-grained token capabilities and repository-creation limits. An identity read or token label does not prove these permissions. |
-| Vercel | `FACTORY_VERCEL_TEAM_ID`, `FACTORY_VERCEL_TEAM_SLUG`; dedicated sandbox project/naming; app-specific `VERCEL_PROJECT_ID` when known | Approved sandbox team/project, preview only, deployment limits, allowed integration actions; inspect the linked project in the app directory before consequential actions. |
-| AWS (optional) | `FACTORY_AWS_ACCOUNT_ID`, `FACTORY_AWS_REGION`, `FACTORY_AWS_ROLE_NAME`; approved services/resources | Dedicated sandbox assumed role, expiry, bounded IAM/trust/region/service permissions, no escalation or production, user-approved cost ceiling and alerts/quotas. Identity checks do not validate these bounds. |
+| GitHub | `FACTORY_GITHUB_OWNER`; user-backed automation identity; selected app repositories; provisioning method; private default | Exclude core/factory-control writes; withhold repository deletion permission; verify creation permission and new-repo coverage separately from content-write scope. |
+| Vercel | `FACTORY_VERCEL_TEAM_ID`, `FACTORY_VERCEL_TEAM_SLUG`; existing project or approved provisioning target; app-specific `VERCEL_PROJECT_ID` | Project token for an existing app where supported; team token only when every reachable project is approved. Verify expiry, roles, plan/cost and preview limits. |
+| AWS | `FACTORY_AWS_ACCOUNT_ID`, `FACTORY_AWS_REGION`, `FACTORY_AWS_ROLE_NAME`; approved services/actions/resources; protected core inventory | Dedicated factory role(s) in the existing account; exact region/resource/namespace bounds, protected ownership tags, no initial IAM writes or broad role delegation; effective-policy simulation and disposable scope tests. |
 
-For each identity: record creator/owner, purpose, exact actions/resources, expiry, where injected, which environment receives it, revocation/rotation method, and redacted evidence. Check provider capabilities at issuance; a fine-grained token or team token may not support the planned operation/scope. The initial scripts require a user-backed `gh` identity (`GET /user` and, for organizations, user membership inventory); a GitHub App installation token does not work as-is. Evaluate a dedicated automation user with an appropriately scoped token, or add a reviewed App adapter later. Use stronger isolation or narrower operations if needed, rather than broadening access by default.
+For each identity record owner, purpose, exact actions/resources, expiry, injection/environment scope, revocation/rotation, cost limits and redacted evidence. Do not substitute broad personal access when an operation fails. No new GitHub organization, Vercel team/subscription, IAM policy or credential is authorized by this checklist.
+
+GitHub repository deletion and file deletion are different permissions: omitting `delete_repo` on a classic token or `Administration: write` on a fine-grained runtime token does not stop content writes. Exclude core repositories entirely from runtime write scope. Review `Repository creation: write` availability/coverage and whether provisioning needs a separate step. Selected repositories are not a name-prefix filter. Current scripts require user-backed `GET /user` and organization membership inventory; App installation tokens need a reviewed adapter. See the [provider-specific decisions](access-matrix.md).
+
+Before AWS issuance, approve a service-specific policy design from the private protected inventory; account isolation is not available. Review resource-level/tag support, indirect execution and role-passing escalation paths. The initial role must not modify IAM, its own trust/policies/boundary, core assets or account controls. An identity read cannot prove these restrictions.
+
+Before any provider writes, create the private stable project record and provenance inventory described in [the provenance standard](../standards/provenance.md). Verify every deployment path supports metadata or an explicitly reviewed equivalent mapping. Credentials must not grant the ability to claim existing/core assets through retagging.
 
 ## Add values outside Git
 
@@ -22,12 +28,12 @@ For each identity: record creator/owner, purpose, exact actions/resources, expir
 
 ## Cloud and live acceptance order
 
-1. Review/merge the foundation with required checks passing.
-2. Agree on GitHub owner/identity and Vercel sandbox scopes, expiry, billing bounds, and allowed test writes. Issue/inject only those credentials.
-3. Create one factory-linked Cloud environment, verify pinned tool installation, network and secret compatibility, save and publish. [Setup entry points](setup.md#codex-cloud-gate-not-performed-by-foundation-setup).
-4. Start a fresh task; run provider preflight. Inspect provider policy/scope separately; perform only the bounded operations authorized for the test.
-5. Complete the [first phone-only app proof, second-task continuation, and recovery proof](mobile-workflow.md), recording source commit and verified HTTPS result without secrets.
-6. Configure app-owned CI/CD through native integration or narrowly trusted OIDC; do not copy the factory's credentials into apps.
-7. If requested later, scope AWS separately before issuing/injecting an AWS identity and running a minimal bounded IaC proof. Include private state, estimated cost, tags, rollback, expiry/cleanup, and DNS as a separate authorization.
+1. Review/merge the foundation with required checks passing, then approve the access/provenance design and private target inventory for all three providers.
+2. Decide GitHub owner/identity and provisioning versus ongoing scope, Vercel project/team scope, and the AWS same-account bounded role design. Approve expiry, cost limits and exact test operations; issue/inject only reviewed credentials. Do not widen permissions to satisfy a script.
+3. Create one factory-linked Cloud environment, verify pinned tools (including AWS CLI), network and each secret mechanism, save and publish. [Setup entry points](setup.md#codex-cloud-gate-not-performed-by-foundation-setup).
+4. Start a fresh task; run provider identity/target preflight. Validate effective scopes separately using non-destructive simulation where available and authorized disposable allowed/denied tests; never attempt destructive operations on core assets.
+5. Complete the [first phone-only app proof, second-task continuation and recovery proof](mobile-workflow.md). Gate each write on exact approved targets; record project/resource/deployment IDs, source/run metadata and verified HTTPS results privately.
+6. Configure app-owned CI/CD through native integration or narrowly trusted OIDC. Verify provenance on that actual deployment path; do not copy the factory's credentials into apps.
+7. If a service-specific AWS deployment proof is selected, separately approve its small IaC plan, private state, cost, provenance, rollback/retry and cleanup. AWS identity validation is part of Phase 3 even if this deployment proof runs after the GitHub/Vercel phone proof. DNS remains a separate authorization.
 
-Until these gates pass, Cloud environment, live CLI access, write permissions, cross-repo execution, mobile operation, and deployment remain unverified.
+Until these gates pass, Cloud environment, credential compatibility, effective permissions, cross-repo execution, mobile operation and deployment remain unverified.
