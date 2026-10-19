@@ -127,6 +127,26 @@ class RendererTests(unittest.TestCase):
                            ("requests", 26), ("incremental_usd", 1.01), ("incremental_usd", float("nan")), ("requests", True)):
             self.assert_rejected(lambda plan: plan["limits"].update({key: value}))
 
+    def test_uuid_project_and_long_owner_repo_fit_without_dropping_constraints(self):
+        plan = config()
+        # Synthetic values with realistic lengths; no private target data.
+        plan["bucket_tags"].update({
+            "factory:project-id": "1274cd72-c680-4ad0-96d0-3c1827d8d9e2",
+            "factory:source-repo": "fixture-owner/factory-smoke-20260405123000-f1e2d3-integration-acceptance",
+            "factory:owner": "fixture-owner", "factory:created-by": "codex-cloud",
+            "factory:creation-run-id": "20260405123000-f1e2d3", "factory:last-run-id": "20260405123000-f1e2d3"})
+        policy, raw, object_tags = s3.render(plan, NOW)
+        self.assertLessEqual(len(raw), 6144)
+        self.assertEqual(len(object_tags), 10)
+        legacy = copy.deepcopy(policy)
+        labels = ("CreateExactTaggedTestBucket", "TagExactBucketWithFixedProvenance", "ReadExactTestResources",
+                  "CreateExactEncryptedProbeOnce", "FixedProbeTagsOnly")
+        for statement, label in zip(legacy["Statement"], labels):
+            statement["Sid"] = label
+        self.assertEqual(len(s3.compact(legacy)), 6172)
+        self.assertEqual(len(raw), 6106)
+        self.assertEqual(len(policy["Statement"]), 5)
+
     def test_policy_size_failure_does_not_drop_constraints(self):
         plan = config()
         for key in ("factory:project-id", "factory:owner", "factory:source-repo", "factory:created-by"):

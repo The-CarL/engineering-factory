@@ -142,15 +142,15 @@ def render(plan, now):
     bucket_values = {"aws:RequestTag/" + key: tags[key] for key in TAGS}
     object_values = {"s3:RequestObjectTag/" + key: object_tags[key] for key in OBJECT_TAGS}
     policy = {"Version": "2012-10-17", "Statement": [
-        statement("CreateExactTaggedTestBucket", "s3:CreateBucket", bucket,
+        statement("CreateTaggedBucket", "s3:CreateBucket", bucket,
                   dict(region, **{"s3:LocationConstraint": plan["region"]}, **bucket_values), ("aws:TagKeys", TAGS)),
-        statement("TagExactBucketWithFixedProvenance", "s3:TagResource", bucket,
+        statement("TagBucket", "s3:TagResource", bucket,
                   dict(region, **bucket_values), ("aws:TagKeys", TAGS)),
-        statement("ReadExactTestResources", list(READ_ACTIONS), [bucket, obj], dict(owned)),
-        statement("CreateExactEncryptedProbeOnce", "s3:PutObject", obj,
+        statement("ReadResources", list(READ_ACTIONS), [bucket, obj], dict(owned)),
+        statement("CreateProbeOnce", "s3:PutObject", obj,
                   dict(owned, **{"s3:if-none-match": "*", "s3:x-amz-server-side-encryption": "AES256"}, **object_values),
                   ("s3:RequestObjectTagKeys", OBJECT_TAGS)),
-        statement("FixedProbeTagsOnly", "s3:PutObjectTagging", obj,
+        statement("TagProbe", "s3:PutObjectTagging", obj,
                   dict(owned, **object_values), ("s3:RequestObjectTagKeys", OBJECT_TAGS))]}
     raw = compact(policy)
     require(len(raw.decode("utf-8")) <= MAX_POLICY_CHARS, "Rendered managed policy exceeds 6144 characters; do not broaden or drop constraints to fit")

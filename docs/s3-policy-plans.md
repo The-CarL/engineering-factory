@@ -62,7 +62,7 @@ python3 scripts/s3-policy-plan.py \
 The output directory must be new under an existing private parent. It and both files are created with permissions 700/600; existing artifacts are never overwritten. Stdout reports preparation only, without private target values or paths. Errors withhold supplied values. Read the files privately:
 
 - `policy.json`: compact exact policy; SHA256 covers the bytes written, without a trailing newline.
-- `review.json`: actual policy digest/character and UTF-8 byte counts, input path/hash, renderer file hash and matching Git revision where available, separate application commit, exact targets, 13/10-tag mapping, declared limits and unresolved gates. An uncommitted renderer is marked accordingly.
+- `review.json`: actual policy digest/character and UTF-8 byte counts, input hash, renderer file hash and matching Git revision where available, separate application commit, exact targets, 13/10-tag mapping, declared limits and unresolved gates. An uncommitted renderer is marked accordingly.
 
 The five fixed statements allow only exact-bucket `CreateBucket` and `TagResource` with all 13 fixed request tags; approved read actions on the exact bucket/object ARNs; and exact-object `PutObject`/`PutObjectTagging`. Upload requires `If-None-Match: *`, AES256 and all ten fixed object tags. Retagging can only reapply those same ten values. Region/expiry conditions apply throughout; resource-account constraints apply to the read/object operations. No action/resource wildcard, delete, ACL/policy write, general configuration mutation, IAM or role delegation is emitted. The literal asterisk in the conditional-write value is not a resource wildcard.
 
