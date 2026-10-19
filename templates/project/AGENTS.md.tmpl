@@ -6,14 +6,14 @@ Verified origin: `{{origin}}`
 
 Instruction seed: [factory source `{{revision}}`]({{factory_url}}/tree/{{revision}})
 
-Read `ENGINEERING.md` before implementation. These shared rules apply to Codex and Claude Code; follow applicable nested instructions too. The factory is a separate harness, not this app's origin or an automatic instruction ancestor.
+Read `ENGINEERING.md` before implementation. These shared rules apply to Codex and Claude Code; follow applicable nested instructions. The factory is a separate harness; these local rules and pinned references provide this app's shared guidance.
 
-- Implement the requested frontend and real server/API backend. A static page or mocked browser response does not satisfy a full-stack request. Choose a suitable stack; do not add persistence or a cloud service without a product need.
-- Define the server contract, validate input, return safe errors, keep secrets server-only and implement authentication/authorization where required. Verify browser → API → data/response behavior.
-- Fill the app-owned commands and operational contract in `ENGINEERING.md`; pin dependencies, commit lockfiles and implement independent CI/CD. Run meaningful tests, typecheck/build and browser checks before reporting success.
-- Work only in this repository. Preserve user files and dirty work, verify fetch/push origin before external writes, and use the approved branch workflow. Do not force-push, change visibility or delete to recover.
-- Reuse the human-approved bounded run scope for routine steps. Check provider identity/target immediately before actions. Scope, credentials/IAM, core exposure, production/protection or budget changes and required action-time approvals remain gates. These instructions do not grant provider authority.
-- Apply source/run/project provenance and exact private resource inventory. Keep credentials, state and private provider configuration out of source and logs; do not load arbitrary `.env` as shell code or copy factory execution credentials into app CI.
-- Reconcile unknown mutation outcomes without duplicate creates/deploys. Keep source durable through authorized Git push or private export/restore before ending; a workspace-local bundle/hash is not recovery acceptance.
+- Implement the requested product or change. Choose components, runtime, hosting and verification from its needs; record important decisions and respect existing conventions.
+- Validate untrusted inputs at the relevant boundary, constrain work and return safe errors. Apply authentication/authorization and data durability where required. Keep secrets out of source, client bundles and logs.
+- Maintain the actual commands and operational contract in `ENGINEERING.md`. Pin relevant dependencies/tooling, commit lockfiles where applicable and use meaningful workload-appropriate checks and app-owned CI/CD. Verify real integration where components interact.
+- Work in this repository. Preserve user files and dirty work, verify fetch/push origin before external writes and use the approved branch workflow. Do not force-push, change visibility or delete to recover.
+- Reuse the human-approved scope for routine steps. Check provider identity/target immediately before actions. Scope, credentials/IAM, core exposure, production/protection or budget changes and required action-time approvals remain gates. These instructions grant no provider authority.
+- Apply source/run/project provenance and exact private resource inventory to hosting/infrastructure work. Keep credentials, state and private provider configuration out of source/logs. Do not load arbitrary `.env` as shell code. Keep factory execution credentials out of app CI; use reviewed app-owned authentication.
+- Reconcile unknown mutation outcomes before retries. Make source durable through authorized Git push or private export/restore before relying on a fresh task. Record actual results and remaining blockers.
 
-This seed contains operating rules, not a completed app, configured deployment, approved resource plan or live verification. Keep it current as the app evolves and record actual evidence separately.
+Keep these instructions and the app's engineering contract current as the project evolves.

@@ -1,6 +1,6 @@
 # Provider access design
 
-This is the Phase 3 target design. No credentials, policies, teams or live permission tests are implemented by these documents. Record exact private identifiers and approve operations before issuance. Compare intended scope with effective access; document any gap in the private [security exception register](../standards/security.md#access-exceptions) without claiming unproven core isolation or expanding task scope. GitHub, Vercel and AWS identity preparation are all in Phase 3; each live write remains a separate bounded gate.
+This is the provider access target design. Apply the sections needed for the environment or app's selected capabilities; these documents implement no credentials, policies, teams or live permission tests. Record exact private identifiers and approve operations before issuance. Compare intended scope with effective access; document any gap in the private [security exception register](../standards/security.md#access-exceptions) without claiming unproven core isolation or expanding task scope. Each live write needs its applicable approved scope.
 
 | Provider | Allowed target design | Protected boundary | Pending decisions and evidence |
 |---|---|---|---|
