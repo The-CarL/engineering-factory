@@ -1,6 +1,6 @@
 # Credential and environment readiness gate
 
-**No credentials, Cloud environment, live repositories or deployments are created by this checklist.** Phase 3 includes GitHub, Vercel and AWS identity preparation. Proceed only when concrete private targets, effective permissions and operations are approved. The [access matrix](access-matrix.md) is the proposed boundary, not a configured control.
+**No credentials, Cloud environment, live repositories or deployments are created by this checklist.** Select identities for the environment or app's required capabilities. Proceed only when concrete private targets, effective permissions and operations are approved. The [access matrix](access-matrix.md) is the proposed boundary, not a configured control.
 
 ## Decisions to record privately before issuance
 
@@ -26,14 +26,16 @@ Before any provider writes, create the private stable project record and provena
 - Cloud environment variables are readable by task processes. Domain-scoped network secrets substitute over HTTPS 443 without a raw process/file value; they are useful only where the CLI/request supports that flow. Personal-vault credentials must be scoped to the selected environment. [Official configuration guide](https://learn.chatgpt.com/docs/environments/cloud-environments#configure-environment-variables-and-network-secrets).
 - Set approved network domains and egress policy for package/tool installation, GitHub clones/API, Vercel API/build flows, and AWS endpoints only as needed. Test support; do not assume arbitrary network access or that a connector grants CLI access.
 
-## Cloud and live acceptance order
+## Environment capability acceptance
 
-1. Review/merge the foundation with required checks passing, then approve the access/provenance design and private target inventory for all three providers.
-2. Decide GitHub owner/identity and provisioning versus ongoing scope, Vercel project/team scope, and the AWS same-account bounded role design. Approve expiry, cost limits and exact test operations; issue/inject only reviewed credentials. Do not widen permissions to satisfy a script.
-3. Prepare/reconcile the one factory-linked Cloud environment from reviewed versioned runtime source. Verify pinned tools (including AWS CLI), real CLI contracts, network and each credential transport. Save, then observe the existing publish job to confirmed completion; preserve the last confirmed release and do not duplicate unknown operations. [Setup entry points](setup.md#codex-cloud-gate-not-performed-by-foundation-setup).
+Complete applicable gates with their actual dependencies; this does not prescribe a sequence or topology for every application.
+
+1. Review/merge the foundation with required checks passing, then approve applicable access/provenance design and private targets for selected provider capabilities.
+2. Decide the selected identities and provisioning versus ongoing scope, including GitHub owner, Vercel project/team or AWS bounded role when relevant. Approve expiry, cost limits and exact capability checks; issue/inject only reviewed credentials. Do not widen permissions to satisfy a script.
+3. Prepare/reconcile the factory-linked Cloud environment from reviewed versioned runtime source. Verify required pinned tools, real CLI contracts, network and each selected credential transport. Save, then observe the existing publish job to confirmed completion; preserve the last confirmed release and do not duplicate unknown operations. [Setup entry points](setup.md#codex-cloud-gate-not-performed-by-foundation-setup).
 4. Start a fresh task on the intended published revision; verify retained-file integrity, dependencies and startup, then provider identity/target preflight. Record native CLI and API results independently in the private release manifest. Validate effective scopes separately using non-destructive simulation where available and authorized disposable allowed/denied tests; never attempt destructive operations on core assets.
-5. Complete the [first phone-only app proof, second-task continuation and recovery proof](mobile-workflow.md). Gate each write on exact approved targets; record project/resource/deployment IDs, source/run metadata and verified HTTPS results privately.
-6. Configure app-owned CI/CD through native integration or narrowly trusted OIDC. Verify provenance on that actual deployment path; do not copy the factory's credentials into apps.
-7. If a service-specific AWS deployment proof is selected, separately approve its small IaC plan, private state, cost, provenance, rollback/retry and cleanup. AWS identity validation is part of Phase 3 even if this deployment proof runs after the GitHub/Vercel phone proof. DNS remains a separate authorization.
+5. Use [phone/continuation capability evidence](mobile-workflow.md#capability-and-recovery-evidence) where claimed, with representative authorized operations. Keep application acceptance workload-specific. Record exact identities, source/run metadata and relevant operational results privately.
+6. Where app CI/CD is configured, use native integration or narrowly trusted app-owned authentication. Verify provenance on the actual deployment path; do not copy factory credentials into apps.
+7. For selected AWS capabilities, review the service-specific IaC plan, private state, cost, provenance, rollback/retry and cleanup before execution. Include these and any DNS operations explicitly in approved scope; an initial authorization can cover them together.
 
 Track each gate independently in private evidence. A saved environment, read-only success or one working provider does not establish publication, another CLI/transport, effective write/denial boundaries, cross-repo execution, mobile continuation or deployment. Do not promote an untested or pending gate to complete.

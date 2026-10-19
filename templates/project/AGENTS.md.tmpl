@@ -1,0 +1,19 @@
+# Project operating instructions
+
+Repository: `{{repository}}`
+
+Verified origin: `{{origin}}`
+
+Instruction seed: [factory source `{{revision}}`]({{factory_url}}/tree/{{revision}})
+
+Read `ENGINEERING.md` before implementation. These shared rules apply to Codex and Claude Code; follow applicable nested instructions. The factory is a separate harness; these local rules and pinned references provide this app's shared guidance.
+
+- Implement the requested product or change. Choose components, runtime, hosting and verification from its needs; record important decisions and respect existing conventions.
+- Validate untrusted inputs at the relevant boundary, constrain work and return safe errors. Apply authentication/authorization and data durability where required. Keep secrets out of source, client bundles and logs.
+- Maintain the actual commands and operational contract in `ENGINEERING.md`. Pin relevant dependencies/tooling, commit lockfiles where applicable and use meaningful workload-appropriate checks and app-owned CI/CD. Verify real integration where components interact.
+- Work in this repository. Preserve user files and dirty work, verify fetch/push origin before external writes and use the approved branch workflow. Do not force-push, change visibility or delete to recover.
+- Reuse the human-approved scope for routine steps. Check provider identity/target immediately before actions. Scope, credentials/IAM, core exposure, production/protection or budget changes and required action-time approvals remain gates. These instructions grant no provider authority.
+- Apply source/run/project provenance and exact private resource inventory to hosting/infrastructure work. Keep credentials, state and private provider configuration out of source/logs. Do not load arbitrary `.env` as shell code. Keep factory execution credentials out of app CI; use reviewed app-owned authentication.
+- Reconcile unknown mutation outcomes before retries. Make source durable through authorized Git push or private export/restore before relying on a fresh task. Record actual results and remaining blockers.
+
+Keep these instructions and the app's engineering contract current as the project evolves.

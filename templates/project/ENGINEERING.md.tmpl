@@ -1,0 +1,31 @@
+# Engineering contract
+
+Repository: `{{repository}}`
+
+Verified origin: `{{origin}}`
+
+Factory source: [{{revision}}]({{factory_url}}/tree/{{revision}})
+
+The shared operating rules in `AGENTS.md` are available locally to both agents. Pinned factory references supplement them. Complete this app-owned contract with actual decisions, commands and evidence as the project develops.
+
+## Product and architecture
+
+Record the product outcome, intended users and acceptance criteria. Choose only required components, runtime, hosting and integrations. Document relevant interfaces, data ownership, configuration boundaries, authentication/authorization and compatibility. If the app needs persistence or jobs, include durability/migration/restore or execution/retry/output behavior as applicable.
+
+## Commands and verification
+
+Document the actual setup, development, execution, validation or packaging commands appropriate to the workload. Maintain relevant dependency/tool pins, lockfiles and app-owned CI/CD. Verify meaningful behavior, failures and required integration in the intended runtime; distinguish local checks, CI and hosted acceptance. Browser, API, typecheck and build commands apply only when relevant. Keep secrets out of source/client bundles/logs and use reviewed app-owned CI authentication.
+
+## Hosting, operation and continuation
+
+Record the agreed targets, deployment/configuration process, source/build identities, exposure/protection and relevant operational checks. Actual secret values and provider IDs stay in approved private records; list non-secret configuration names and private references here. Include rollback/retry, monitoring, cleanup ownership and any data recovery requirements.
+
+Document how a fresh task clones this repository, restores approved private configuration, runs relevant commands and reconciles existing resources. Keep source durable through approved Git push or private export with restoration proof. Record project/source/run provenance and actual acceptance results; tool installation or identity reads do not prove hosted behavior.
+
+## Pinned factory references
+
+- [Application design]({{factory_url}}/blob/{{revision}}/standards/application-design.md)
+- [Testing]({{factory_url}}/blob/{{revision}}/standards/testing.md) and [software quality]({{factory_url}}/blob/{{revision}}/standards/software-quality.md)
+- [Security]({{factory_url}}/blob/{{revision}}/standards/security.md) and [infrastructure]({{factory_url}}/blob/{{revision}}/standards/infrastructure.md)
+- [Deployment]({{factory_url}}/blob/{{revision}}/standards/deployment.md) and [provenance]({{factory_url}}/blob/{{revision}}/standards/provenance.md)
+- [Bounded project work]({{factory_url}}/blob/{{revision}}/standards/bounded-runs.md) and [provider contracts]({{factory_url}}/blob/{{revision}}/docs/provider-workflows.md)

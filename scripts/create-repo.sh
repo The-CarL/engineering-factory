@@ -25,7 +25,15 @@ lookup_repo
 if [[ "$REPO_STATE" == not-visible ]]; then
   # Missing from a successful visible inventory is not proof of global availability.
   # An inaccessible private repository or concurrent create safely fails at GitHub.
-  GH_HOST=github.com gh repo create "$TARGET" "--$VISIBILITY" >/dev/null 2>&1 || fail 'Create failed or outcome unknown. No clone attempted; inspect visible inventory and retry. Never delete to recover.'
+  if ! python3 "$FACTORY_ROOT/scripts/lib/github-api.py" create "$OWNER_KIND" "$TARGET" "$VISIBILITY"; then
+    # Do not retry POST, even if the response was lost. A subsequent invocation
+    # starts with inventory reconciliation and can reuse a visible exact match.
+    lookup_repo
+    if [[ "$REPO_STATE" == not-visible ]]; then
+      fail 'Create failed or outcome unknown; target remains not visible. No clone or mutation retry attempted.'
+    fi
+    fail 'Create outcome reconciled to a visible repository. No clone attempted; inspect visibility and retry safely.'
+  fi
   lookup_repo
 fi
 verify_visibility

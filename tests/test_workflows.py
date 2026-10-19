@@ -45,7 +45,25 @@ if name == "gh":
         if state.get("api_failure"):
             stop()
         endpoint = next((arg for arg in args[1:] if arg == "user" or arg.startswith(("users/", "user/", "orgs/"))), "")
-        if endpoint == "user":
+        if "--method" in args and args[args.index("--method") + 1] == "POST":
+            state["creates"] = state.get("creates", 0) + 1
+            state["create_endpoint"] = endpoint
+            payload = json.load(sys.stdin)
+            state["create_payload"] = payload
+            expected = "user/repos" if state.get("owner_type", "User") == "User" else "orgs/example-owner/repos"
+            if endpoint != expected or "--input" not in args or "--include" not in args:
+                save()
+                stop()
+            target = "example-owner/" + payload["name"]
+            visibility = "private" if payload["private"] else "public"
+            if not state.get("create_failure") or state.get("create_failure_after_write"):
+                state.setdefault("repos", []).append({"full_name": target, "visibility": visibility})
+            save()
+            if state.get("create_failure"):
+                print("HTTP/2.0 403 Forbidden\r\nx-github-request-id: ABCD:123456:ABCD12:123456:12345678\r\n\r\n" + json.dumps({"message": "Resource not accessible by personal access token PRIVATE_PROVIDER_DIAGNOSTIC_MUST_NOT_LEAK"}))
+                stop()
+            print("HTTP/2.0 201 Created\r\ncontent-type: application/json\r\n\r\n" + json.dumps({"full_name": target, "private": payload["private"]}))
+        elif endpoint == "user":
             print(state.get("identity", "example-owner"))
         elif endpoint.startswith("users/"):
             print(state.get("owner_type", "User"))
@@ -62,15 +80,6 @@ if name == "gh":
                 print(json.dumps([[], state.get("repos", [])]))
         else:
             stop()
-    elif args[:2] == ["repo", "create"]:
-        state["creates"] = state.get("creates", 0) + 1
-        if state.get("create_failure"):
-            save()
-            stop()
-        target = args[2]
-        visibility = args[3].removeprefix("--")
-        state.setdefault("repos", []).append({"full_name": target, "visibility": visibility})
-        save()
     elif args[:2] == ["repo", "clone"]:
         state["clones"] = state.get("clones", 0) + 1
         save()
@@ -78,6 +87,7 @@ if name == "gh":
         Path(path).mkdir(parents=True)
         if state.get("clone_failure"):
             (Path(path) / "partial.txt").write_text("interrupted")
+            print(state.get("clone_diagnostic", ""), file=sys.stderr)
             stop()
         git = os.environ["REAL_GIT"]
         subprocess.run([git, "init", "--quiet", path], check=True)
@@ -187,6 +197,9 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.state()["creates"], 1)
         self.assertEqual(self.state()["clones"], 1)
         self.assertEqual(self.state()["repos"][0]["visibility"], "private")
+        self.assertEqual(self.state()["create_endpoint"], "user/repos")
+        self.assertEqual(self.state()["create_payload"], {"name": "demo", "private": True})
+        self.assertFalse(any(call[1][:2] == ["repo", "create"] for call in self.calls()))
 
     def test_existing_remote_is_reused_without_create(self):
         self.existing()
@@ -270,6 +283,7 @@ class WorkflowTests(unittest.TestCase):
         self.update(owner_type="Organization")
         self.create()
         self.assertTrue(self.checkout.is_dir())
+        self.assertEqual(self.state()["create_endpoint"], "orgs/example-owner/repos")
 
     def test_inactive_org_membership_aborts(self):
         self.update(owner_type="Organization", membership="pending")
@@ -278,10 +292,22 @@ class WorkflowTests(unittest.TestCase):
 
     def test_create_error_does_not_attempt_clone(self):
         self.update(create_failure=True)
-        self.create(ok=False)
+        result = self.create(ok=False)
+        self.assertIn("HTTP 403", result.stderr)
+        self.assertIn("token cannot access this resource", result.stderr)
+        self.assertIn("request_id=ABCD:123456:ABCD12:123456:12345678", result.stderr)
         self.assertEqual(self.state()["creates"], 1)
         self.assertEqual(self.state().get("clones", 0), 0)
         self.assertFalse(self.checkout.exists())
+
+    def test_create_lost_response_reconciles_and_retry_does_not_post(self):
+        self.update(create_failure=True, create_failure_after_write=True)
+        self.create(ok=False)
+        self.assertEqual(self.state()["creates"], 1)
+        self.assertFalse(self.checkout.exists())
+        self.create()
+        self.assertEqual(self.state()["creates"], 1)
+        self.assertTrue(self.checkout.exists())
 
     def test_failed_clone_cleans_partial_and_retry_reuses_remote(self):
         self.update(clone_failure=True)
@@ -294,6 +320,16 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.state()["creates"], 1)
         self.assertEqual(self.state()["clones"], 2)
         self.assertFalse((self.checkout / "partial.txt").exists())
+
+    def test_clone_auth_failure_is_classified_without_private_git_output(self):
+        synthetic = "ghp_" + "x" * 36
+        self.existing()
+        self.update(clone_failure=True, clone_diagnostic="fatal: Authentication failed for https://user:" + synthetic + "@github.com/private/repo")
+        result = self.clone(ok=False)
+        self.assertIn("Git credentials rejected", result.stderr)
+        self.assertNotIn(synthetic, result.stderr + result.stdout)
+        self.assertNotIn("/private/repo", result.stderr + result.stdout)
+        self.assertFalse(self.checkout.exists())
 
     def test_wrong_cloned_origin_does_not_publish_checkout(self):
         self.existing()

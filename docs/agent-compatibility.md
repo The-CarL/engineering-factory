@@ -13,7 +13,7 @@ When instructions change, start a fresh session and verify the intended sources 
 
 ## Working in an independent app
 
-Start either agent in the exact app checkout and working directory. Confirm its Git origin, branch, commit and dirty files, then read that app's applicable instructions and standards. Factory instructions are not automatically inherited across separate clones. Preserve the app's conventions; explicitly carry only relevant factory requirements into its approved workflow. Check any ancestor instructions exposed by the chosen filesystem layout and client.
+Start either agent in the exact app checkout and working directory. Confirm its Git origin, branch, commit and dirty files, then read that app's applicable instructions and standards. Factory instructions are not automatically inherited across separate clones. For a new app, the [local instruction seed](new-project.md#repository-and-instructions) supplies usable shared rules, a Claude import, an app-owned engineering contract and pinned factory references; it generates no app or CI code. Preserve differing existing app instructions and integrate deliberately. Check any ancestor instructions exposed by the chosen filesystem layout and client. Continuing the app does not require another chat.
 
 Before switching agents, prepare a compact handoff containing the repository identity, working directory, branch/commit, changed files and preserved user work, tests/results, approved scope, unresolved questions, and private references to pending operations. Reconcile those operations before retrying. Do not include credentials, raw auth responses or private provider details in public handoffs. A receiving agent must recheck identity/targets before external actions.
 
