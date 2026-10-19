@@ -21,9 +21,9 @@ def document(statements):
 
 
 def statement(actions, resources, condition=None, effect='Allow', **extra):
-    result = {'Effect': effect, 'Action': actions, 'Resource': resources}
+    result = {'Effect': effect, 'Action': copy.deepcopy(actions), 'Resource': copy.deepcopy(resources)}
     if condition:
-        result['Condition'] = condition
+        result['Condition'] = copy.deepcopy(condition)
     return dict(result, **extra)
 
 
@@ -252,7 +252,7 @@ def render(config, baseline, boundary, bootstrap, trust):
     execution = [statement(['sts:GetCallerIdentity'], '*')]
     execution.append(statement([service + ':' + action for service, permitted in data_actions.items() for action in permitted],
                                [resource for service in data_actions for resource in resources[service]], owned()))
-    execution += [statement(['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'], objects + buckets, s3_context),
+    execution += [statement(['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'], buckets, s3_context),
                   statement(['logs:CreateLogStream', 'logs:PutLogEvents'], streams, context())]
     # Role-session tags cannot silently redirect execution to a different project or environment.
     # PrincipalArn is the immutable IAM role ARN for assumed-role sessions, not a caller-supplied tag.

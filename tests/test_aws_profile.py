@@ -91,6 +91,12 @@ class AWSProfileTests(unittest.TestCase):
         for forbidden in ('iam:', 'route53:', 'CreateFunction', 'DeleteTable', 'PutBucketPolicy', 'AssumeRole'):
             self.assertNotIn(forbidden, app)
 
+    def test_execution_conditions_cannot_mutate_runner_grants(self):
+        statements = [s for name, policy in self.result.items() if name.startswith('runner-app-') for s in policy['Statement']]
+        object_grant = next(s for s in statements if s['Effect'] == 'Allow' and isinstance(s['Action'], list) and 's3:PutObject' in s['Action'])
+        self.assertNotIn('ArnLike', object_grant['Condition'])
+        self.assertEqual(object_grant['Condition']['StringEquals']['s3:ResourceAccount'], self.config['account_id'])
+
     def test_missing_bootstrap_guards_are_rejected(self):
         for sid in ('AssumeFactoryRunnerOnly', 'DenyDirectAwsUse', 'DenyOtherRoles'):
             changed = copy.deepcopy(self.bootstrap)
