@@ -48,6 +48,10 @@ After creation, the helper reads the deployment's exact project, `target: null` 
 
 Client tool pins and remote build tools are different contracts. A provider-controlled build can use newer Node/npm or build CLI versions than the local runtime. Verify the app's supported `engines`, package-manager declaration and install command against the actual remote build log; do not require the remote npm version to equal a local CLI pin unless the reviewed install mechanism supplies that version. Keep lockfile/install reproducibility and record observed remote versions. An `EBADENGINE` or `invalid_engines_value` is a build configuration failure, not evidence that a token lacks deployment permission.
 
+## Offline AWS permission preparation
+
+Use the [S3 policy planner](s3-policy-plans.md) for a small exact-bucket/object proposal when that test is selected. It performs no AWS calls or writes, renders only private review files and leaves grant, boundary, service-model/wrapper, egress and actual data-path acceptance unresolved. Do not substitute its structural tests for IAM simulation or live proof.
+
 ## Recovery snapshots and deployed acceptance
 
 Preserve source bundles/archives, private inventories and a snapshot of operation evidence before changing a retained run. The helper hashes only explicitly selected files; it does not export, upload, encrypt, scan or grant durable storage. Use a private root directory (700), keep the manifest private (600), retain its digest independently, then copy artifacts to approved private durable storage and verify them again from the restored copy. Source bundles still require Git bundle/ref verification when restored. A local manifest alone is not durable recovery proof.
