@@ -17,6 +17,8 @@ make check
 
 ## Repository workflows (after the credential gate)
 
+For agent-driven creation, resolve and verify the exact target from the authorized request and approved owner/namespace, then supply the matching `--confirm` programmatically. The flag does not require another human approval of a routine generated name. Ask promptly when owner, visibility or consequential scope remains unresolved; follow [conversational delivery](../standards/conversational-delivery.md).
+
 Use a shell environment with explicit, approved configuration. `.env.example` is a names-only checklist; it is not a shell script and nothing automatically loads `.env`. Do not paste credentials into commands or `source` files downloaded from another repository.
 
 ```bash

@@ -6,6 +6,8 @@ The agent prepares scope from the product request and known private configuratio
 
 ## Prepare applicable scope once
 
+Use [conversational delivery](conversational-delivery.md) to ask, infer or postpone unresolved decisions. Raise missing consequential scope before dependent implementation. The fields below are the agent's record to complete from context and focused questions, not a form for the user. Exact targets may follow from an authorized request and approved configuration; resolve and verify them without asking the user to repeat a generated repository name or programmatic `--confirm` value. Budget, exposure or authority that cannot be resolved from existing scope still requires a concrete question before the dependent action.
+
 Keep actual values in a private project/run record. Include the fields relevant to the proposed work:
 
 - Product outcome, workload/acceptance criteria, source/runtime revision, stable project/run identity and recovery/cleanup ownership.
@@ -26,4 +28,4 @@ Perform authorized implementation, repository, CI, hosting and verification work
 
 A known terminal failure may receive a bounded corrected attempt when included in scope; preserve history and use a new operation record. Unknown outcomes require read-only reconciliation before another mutation. Resume exact verified resources; never clear a journal or change a name to duplicate or adopt them. Preserve source/private recovery artifacts durably and verify restoration when continuation depends on them.
 
-Ask only for an actual scope/limit/identity/target/core-exposure/production/credential/IAM/protection change, unresolved consequential ambiguity or required action-time approval. Prepare the concrete target/diff and evidence first. A tool rejection blocks that action; explain its stated reason and continue unaffected work without using another route.
+Ask product/design questions when needed under conversational delivery. Request approval only for an actual scope/limit/identity/target/core-exposure/production/credential/IAM/protection change, unresolved consequential authority or required action-time approval; prepare the concrete target/diff and available evidence first. Do not delay a design question until a release-approval step. A tool rejection blocks that action; explain its stated reason and continue unaffected work without using another route to evade it.

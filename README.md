@@ -1,8 +1,8 @@
 # Engineering factory
 
-A reusable engineering and hosting harness for creating, operating and continuing independent applications from one Codex Cloud environment. It supports static sites, frontends, APIs/services, full-stack apps, workers/jobs and other workloads. Each project chooses its architecture, runtime, providers and verification from its product needs.
+A conversational engineering workspace for going from an idea through collaborative design and a prototype to a tested, working solution and agreed deployment, using voice or text from a phone or desktop. One reusable Codex Cloud environment supports independent application repositories. Each project chooses its architecture, runtime, providers and verification from its product needs.
 
-Start with [Create or continue an application](docs/new-project.md) and the [application design standard](standards/application-design.md). The factory supplies shared operating rules, focused helpers and provider contracts. The app agent owns implementation, relevant checks, CI/CD, hosting and operations in the independent app repository.
+Start with [conversational delivery](standards/conversational-delivery.md) and [Create or continue an application](docs/new-project.md). The agent leads design, asks consequential questions early, infers routine details, explicitly postpones decisions that can wait, and owns delivery through relevant checks and hosting. The user should not have to supply a complete specification or discover blockers through repeated status requests. The factory supplies shared rules, focused helpers and provider contracts; apps own their implementation and operating records.
 
 ## Available capabilities
 
@@ -31,7 +31,7 @@ Factory checks establish offline behavior. Accept the environment capabilities a
 ## Operating references
 
 - [Setup and local helpers](docs/setup.md), [architecture](docs/architecture.md) and [phone operation](docs/mobile-workflow.md)
-- [Bounded work](standards/bounded-runs.md), [provider contracts](docs/provider-workflows.md) and [runtime acceptance](standards/runtime.md)
+- [Conversational delivery](standards/conversational-delivery.md), [application design](standards/application-design.md), [bounded work](standards/bounded-runs.md) and [provider contracts](docs/provider-workflows.md)
 - [Runtime installation and provider commands](docs/runtime-commands.md), [tool pins](runtime/pins.json) and [names-only environment design](runtime/environment.example.json)
 - [Security model](docs/security-model.md), [provider access design](docs/access-matrix.md) and [credential gate](docs/credential-checklist.md)
 - [Project ownership/provenance](standards/provenance.md), [shared agent rules](AGENTS.md) and [Codex/Claude compatibility](docs/agent-compatibility.md)

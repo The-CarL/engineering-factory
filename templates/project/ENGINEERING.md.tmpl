@@ -12,6 +12,12 @@ The shared operating rules in `AGENTS.md` are available locally to both agents. 
 
 Record the product outcome, intended users and acceptance criteria. Choose only required components, runtime, hosting and integrations. Document relevant interfaces, data ownership, configuration boundaries, authentication/authorization and compatibility. If the app needs persistence or jobs, include durability/migration/restore or execution/retry/output behavior as applicable.
 
+## Delivery state and decisions
+
+Keep a compact current record of the goal and agreed acceptance, design decisions and user answers, material inferred assumptions and their basis, and postponed decisions with the reason and concrete reopening trigger. Update it as codesign, prototype feedback and implementation change the solution. This is agent-maintained continuity, not a form the user must fill in.
+
+Record the latest durable branch/commit, completed and remaining work, actual local/CI/hosted verification boundaries, deployment state, blockers and specific next actions. Keep existing authorization and private operation/resource references available through approved private records; do not copy credentials or private provider IDs here. Reconcile this state at the next session before reopening decisions or retrying operations. Check actual source/runtime revisions; an older snapshot or instruction seed may need a deliberate update.
+
 ## Commands and verification
 
 Document the actual setup, development, execution, validation or packaging commands appropriate to the workload. Maintain relevant dependency/tool pins, lockfiles and app-owned CI/CD. Verify meaningful behavior, failures and required integration in the intended runtime; distinguish local checks, CI and hosted acceptance. Browser, API, typecheck and build commands apply only when relevant. Keep secrets out of source/client bundles/logs and use reviewed app-owned CI authentication.
@@ -24,6 +30,7 @@ Document how a fresh task clones this repository, restores approved private conf
 
 ## Pinned factory references
 
+- [Conversational delivery]({{factory_url}}/blob/{{revision}}/standards/conversational-delivery.md)
 - [Application design]({{factory_url}}/blob/{{revision}}/standards/application-design.md)
 - [Testing]({{factory_url}}/blob/{{revision}}/standards/testing.md) and [software quality]({{factory_url}}/blob/{{revision}}/standards/software-quality.md)
 - [Security]({{factory_url}}/blob/{{revision}}/standards/security.md) and [infrastructure]({{factory_url}}/blob/{{revision}}/standards/infrastructure.md)

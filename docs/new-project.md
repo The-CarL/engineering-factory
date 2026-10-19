@@ -4,11 +4,15 @@ Use the reusable factory environment for independent applications. Describe the 
 
 ## Product scope and decisions
 
+Lead the conversation under [conversational delivery](../standards/conversational-delivery.md): propose an approach and observable success, ask about consequential unknowns before dependent work, infer routine reversible choices and postpone only with an explicit reopening trigger. Reuse context and prior answers. The product-outcome prompt below is an optional example; a voice or text idea can start codesign without it.
+
 Apply the [application design standard](../standards/application-design.md). Choose the smallest suitable supported architecture, runtime and hosting. Add a user interface, server/API, persistence, authentication, queues or schedules when the product needs them. Record decisions and actual operating commands in the app's `ENGINEERING.md`.
 
 Prepare consequential operations from known configuration under [bounded project work](../standards/bounded-runs.md): exact repository/visibility, selected provider targets, public exposure, permissions, cost limits and recovery. The agent fills these details rather than asking the user to complete a universal form. Existing exact authorization persists. An initial approval can cover routine implementation, repository, CI and hosting work together; ask only for missing consequential scope, an actual change or required action-time approval. Routine choices and independent authorized work can continue. Another chat is optional and requires human authorization for its recipient/purpose.
 
 ## Repository and instructions
+
+Check the intended repository/build/test/hosting/data path and actual source/runtime revisions early, before substantial dependent implementation. Surface missing capabilities or decisions with evidence and a concrete next action. Continue independent work and identify partial prototypes accurately; a local scaffold cannot establish the requested hosted integration.
 
 Use `create-repo.sh` for an authorized new repository or `clone-repo.sh` for an existing one. Private is the default; use the approved visibility and branch workflow. Verify the exact independent Git root and fetch/push origin. Keep app source and provider state out of the factory.
 
@@ -34,6 +38,8 @@ Use the selected provider's official tools and [contracts](provider-workflows.md
 Verify the workload's real outcome and failure behavior in the intended runtime. Browser interaction is relevant to a UI; request/response checks to an API; execution, retry and output checks to a job. Verify component integration, authorization and durability where applicable. Keep app acceptance separate from factory environment capability checks, with exact source/configuration/deployment evidence and private inventory.
 
 Make source durable through authorized Git push or approved private export with restore verification. A later task uses the same environment, clones the saved app identity, reads local instructions/commands, restores approved private configuration and reconciles existing resources before changes. Record operational and recovery details; do not assume workspace files survive a fresh task.
+
+Keep the goal, decisions/assumptions, deferred decisions and triggers, scope references, validation/deployment state, blockers and next actions in the app's delivery record. A receiving session reuses these decisions and verifies current state before resuming.
 
 ## Product-outcome prompt
 
