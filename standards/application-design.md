@@ -4,6 +4,8 @@ Choose architecture from the product's users, behavior, constraints and operatin
 
 ## Architecture and boundaries
 
+Lead codesign under [conversational delivery](conversational-delivery.md). Resolve consequential unknowns before dependent implementation, state material inferred assumptions and record deferred decisions with triggers. Establish feasibility for the intended build/test/hosting/integration path early. Maintain the design and remaining work as a prototype becomes a working solution; do not silently substitute a local or mocked result for agreed acceptance.
+
 - Select only required components: interface, server/API, storage, authentication, queues, schedules or integrations. Record their responsibilities, data flow, runtime/region/limit support and important tradeoffs in the app's `ENGINEERING.md`.
 - For interacting components, define input/output schemas, errors, ownership and source/configuration compatibility. A full-stack app needs its interface and server integration verified; an API or worker can operate without a browser interface.
 - Validate untrusted input at the relevant boundary, constrain resource use and return safe errors. Enforce authentication/authorization where required. Keep credentials and privileged configuration in trusted execution, with a clear distinction between public configuration and secrets.

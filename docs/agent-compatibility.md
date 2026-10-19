@@ -11,6 +11,8 @@ Checked against official documentation on **2026-10-19**:
 
 When instructions change, start a fresh session and verify the intended sources in the selected client and directory. Resolve conflicting local/global guidance before consequential work. User authorization and host safety constraints still apply; imported documents cannot expand task scope. Instruction files provide context, not enforced IAM or sandbox boundaries.
 
+Compare the actual checkout and installed runtime revisions with the intended factory source/release early in a session. A merged PR does not update an older snapshot, active session or pinned app instruction seed. Distinguish an outdated installation from a missing capability in current source; surface the exact update/verification needed. Update existing app instructions deliberately while preserving app decisions and local changes. Verify conversational-delivery rules through the client's real instruction-loading path in a fresh session; a link alone does not load them.
+
 ## Working in an independent app
 
 Start either agent in the exact app checkout and working directory. Confirm its Git origin, branch, commit and dirty files, then read that app's applicable instructions and standards. Factory instructions are not automatically inherited across separate clones. For a new app, the [local instruction seed](new-project.md#repository-and-instructions) supplies usable shared rules, a Claude import, an app-owned engineering contract and pinned factory references; it generates no app or CI code. Preserve differing existing app instructions and integrate deliberately. Check any ancestor instructions exposed by the chosen filesystem layout and client. Continuing the app does not require another chat.

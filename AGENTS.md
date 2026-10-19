@@ -1,6 +1,16 @@
 # Factory operating instructions
 
-This public repository is a general engineering and hosting harness for independent applications, anchored by one reusable Codex Cloud environment. Follow [project guidance](docs/new-project.md) and [application design](standards/application-design.md). Choose architecture, runtime, providers and verification from the product's needs.
+This public repository supports conversational engineering from a phone or desktop: idea -> collaborative design -> prototype -> tested, working solution and agreed deployment. One reusable Codex Cloud environment serves independent applications. The agent owns delivery, including resolving uncertainty and surfacing blockers. Follow [conversational delivery](standards/conversational-delivery.md), [project guidance](docs/new-project.md) and [application design](standards/application-design.md).
+
+## Lead the session
+
+- Preserve the user's intended outcome across questions, corrections and status requests. Lead design before substantial implementation: propose an approach, define success and identify consequential unknowns. Scale the conversation to the task; do not require a universal intake form or a fully specified prompt.
+- Resolve uncertainty deliberately: **ask** when the answer affects product behavior, architecture, cost, exposure or authority; **infer** routine reversible details from context and state material assumptions; **postpone** only with a reason and a trigger for revisiting the decision before dependent work. Do not silently build through an unresolved consequential decision.
+- Reuse existing decisions and authorization. An authorized outcome covers its necessary routine steps within agreed bounds. Resolve and verify exact targets; programmatic `--confirm` arguments do not require another human confirmation when the target follows from that scope. Ask for missing decisions promptly, with a recommendation and practical tradeoffs.
+- Check the intended delivery path early: current source/runtime revisions, required tools/transports, repository operations, build/test support, hosting and data/integration access. Distinguish configured, verified and unknown capabilities. A merged helper is not necessarily installed in the environment; identity reads do not prove deployment. Surface gaps before substantial dependent implementation.
+- When blocked, promptly explain the affected outcome, evidence, concrete next action and any input needed. Separate a missing decision/authorization from unavailable access/tooling. Continue independent authorized work, identify partial/local results clearly, and do not substitute a scaffold for the agreed working solution or silently change the design to avoid a blocker.
+- Give concise progress updates during active work; a status question does not cancel the task. Keep tool waits bounded where supported and report pending approvals/waits. The user should not have to request status to discover a blocker.
+- Maintain durable delivery state in the app's `ENGINEERING.md` and approved private records: goal, decisions/assumptions, deferred decisions and triggers, scope references, exact source, validation/deployment state, blockers and next actions. Reconcile it on continuation; local files or a chat summary alone do not establish durable source or provider state.
 
 ## Before working
 
@@ -24,7 +34,7 @@ This public repository is a general engineering and hosting harness for independ
 
 - Public code and private execution identities are separate trust domains. Never print tokens, dump environment variables, enable shell tracing around credentials, put secrets in command arguments, or commit live `.env` files, state, private keys, or credential artifacts.
 - Do not automatically `source .env`. Pass approved configuration through explicit environment variables. Connector access does not authenticate Cloud CLIs.
-- Request user authorization for privileged, destructive, production, credential, or billable provisioning actions unless that exact scope was already authorized. First prepare the concrete plan/diff and validation evidence the user can review. Routine local edits, tests, and read-only inspection can proceed.
+- Resolve missing consequential scope early. For a newly required privileged, destructive, production, credential or billable action outside existing authorization, prepare its concrete plan/diff and available validation evidence before requesting approval. Do not defer product questions until that approval step or ask again for already authorized work. Routine local edits, tests and read-only inspection can proceed.
 - Establish applicable consequential [scope](standards/bounded-runs.md), then execute routine authorized work without repeated human confirmation. Reuse existing exact authorization and preserve approved targets, credentials, limits and protections. Stop only for an actual scope change, unresolved consequential ambiguity or required action-time approval. A template/profile alone grants no authority.
 - Enforce scope with provider permissions, role boundaries, explicit targets, and budget controls. These instructions are not an IAM boundary. Never use broad personal credentials to work around a permission failure.
 - Keep existing/core assets outside runtime write scope. For AWS use dedicated bounded roles in the existing account; review service/action/resource/region allowlists, protected resources/tags and indirect execution. No initial IAM writes or broad role delegation. GitHub repository-delete restrictions do not protect file contents; Vercel team tokens reach every team project. Use the [access matrix](docs/access-matrix.md) before credential issuance.
@@ -34,6 +44,6 @@ This public repository is a general engineering and hosting harness for independ
 
 ## Failure and completion
 
-- Stop on ambiguous targets, unexpected visibility/origin, permission failures, or unknown mutation outcomes. Inspect current state and retry idempotently. Do not delete/recreate resources as recovery without approval.
+- Stop the affected action on ambiguous targets, unexpected visibility/origin, permission failures or unknown mutation outcomes. Surface the blocker, ask for the specific missing decision when needed and continue unaffected authorized work. Inspect current state and retry idempotently; do not delete/recreate resources as recovery without approval.
 - Preserve existing checkouts and dirty files. Never force-push, reset user work, disable protection, or auto-link an unknown Vercel project to recover.
 - Summarize resulting behavior, relevant checks, source/PR, remaining risks and next gate. Record only redacted evidence. Claim environment, transport, hosting or application capabilities only after their actual verification; keep factory capability evidence separate from app acceptance.

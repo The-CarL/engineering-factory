@@ -17,6 +17,8 @@ Apps use independent origins and ignored `workspaces/OWNER/REPO` clones. Keep ap
 
 ## Execution and ownership boundaries
 
+The intended user experience is conversational delivery: idea -> collaborative design -> prototype -> verified working solution and agreed hosting. The agent leads design, resolves uncertainty by asking, inferring or explicitly postponing, checks feasibility early and owns progress through completion. The app's engineering record preserves decisions and delivery state across sessions. See [conversational delivery](../standards/conversational-delivery.md) and [phone acceptance](mobile-workflow.md#conversational-delivery-acceptance). Helper checks alone do not establish this experience.
+
 Public source, task execution, private credential injection, app CI/CD and each selected provider target are separate trust domains. Connectors do not authenticate Cloud CLIs. Task operations exclude core/unrelated assets; intended provider policies should enforce that boundary. Actual token access can be broader and must be recorded in private reviewed [access exceptions](../standards/security.md#access-exceptions). Names, tags and no-delete flags do not establish hard isolation.
 
 Use only the providers the app needs. AWS operations use reviewed bounded roles/service/resource/region/IaC profiles; identity reads do not prove provisioning. Projects selecting Vercel follow its [project/initial-release contract](provider-workflows.md#new-vercel-project-and-initial-release); the preview helper remains conditional on its protected-project and production-baseline guards. Use the [access matrix](access-matrix.md), [infrastructure](../standards/infrastructure.md) and [bounded scope](../standards/bounded-runs.md) for relevant operations.
