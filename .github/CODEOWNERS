@@ -1,0 +1,10 @@
+# Ownership is advisory until code-owner review requirements are enabled.
+# Use a separate automation identity before enforcing approvals for agent-authored PRs.
+* @The-CarL
+
+# High-impact control-plane files
+/.github/ @The-CarL
+/AGENTS.md @The-CarL
+/standards/ @The-CarL
+/scripts/ @The-CarL
+/providers/ @The-CarL
