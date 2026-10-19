@@ -8,9 +8,10 @@ A public engineering harness for one reusable Codex Cloud environment and many i
 - [Local setup and repository scripts](docs/setup.md)
 - [Security model](docs/security-model.md) and [provider access design](docs/access-matrix.md)
 - [Mandatory project ownership and provenance](standards/provenance.md)
+- [Reusable runtime, credential transport and release acceptance](standards/runtime.md)
 - [Credential and Cloud readiness gate](docs/credential-checklist.md)
 - [Phone-only acceptance tests](docs/mobile-workflow.md)
-- [Agent instructions](AGENTS.md) and [engineering standards](standards/software-quality.md)
+- [Shared agent instructions](AGENTS.md), [Codex/Claude Code compatibility](docs/agent-compatibility.md) and [engineering standards](standards/software-quality.md)
 
 ```bash
 ./scripts/install-check-tools.sh
@@ -22,6 +23,6 @@ Validation needs no GitHub, Vercel, or AWS credentials. Tool downloads use offic
 
 Repository creation defaults to private and requires an explicit owner/repo confirmation. Clones live in ignored `workspaces/OWNER/REPO`, with origin/visibility checks and safe retry. `--dry-run` is an offline plan with no provider calls or writes.
 
-The foundation does not create credentials, Cloud environments, infrastructure, or deployments. **Cloud, live provider permissions, and the two-task phone workflow remain unverified** until their acceptance gates pass. Phase 3 prepares GitHub, Vercel and same-account bounded AWS identities. All infrastructure and Vercel work requires stable project identity, source/run metadata and private inventory. Public code contains configuration names only; private identities and provider-enforced boundaries belong outside Git.
+The foundation does not create credentials, Cloud environments, infrastructure, or deployments. **Runtime releases, provider capabilities and the two-task phone workflow require separate acceptance evidence**; local checks do not establish them. Phase 3 prepares GitHub, Vercel and same-account bounded AWS identities. All infrastructure and Vercel work requires stable project identity, source/run metadata and private inventory. Public code contains configuration names only; private identities and provider-enforced boundaries belong outside Git.
 
 Licensed under [MIT](LICENSE).

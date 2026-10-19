@@ -11,6 +11,14 @@
 terraform.tfvars
 *.auto.tfvars
 
+# Personal agent instructions/settings and local auth/session artifacts
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/.credentials.json
+.claude/projects/
+.codex/auth.json
+.codex/sessions/
+
 # Ephemeral agent checkouts and generated artifacts
 workspaces/
 .tmp/

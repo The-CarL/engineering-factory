@@ -8,3 +8,7 @@
 - Verify the result through the user's real flow: deployment status, HTTPS response, expected behavior, relevant API/data path, exact project/deployment IDs, metadata/inventory and source commit. A successful CLI exit is insufficient. Missing resource/run attribution fails acceptance.
 - Keep a rollback reference and verify provider-specific rollback semantics, data compatibility, and retained artifacts. Plan migration/restore before irreversible data changes.
 - Retry using known repository/project/deployment identities. Inspect unknown outcomes; reconcile child resources and private append-only operation events before retrying. Do not create duplicate projects, overwrite original attribution, or redeploy blindly. Record a concise redacted result and cleanup responsibility.
+
+## Execution environment releases
+
+Apply [runtime acceptance](runtime.md#release-evidence-and-recovery) to environment build artifacts as well as app releases. Link reviewed setup/wrapper source, private configuration revision, tool versions and retained-file hashes to the observed environment/snapshot or publish job. Save, publish and fresh-task readiness are distinct gates. Preserve the last confirmed release; reconcile an existing job or unknown outcome before retrying. Separate provider API/CLI/read results from remaining write, denied-behavior, deployment and phone-continuation proof. Never report a queued, stale or failed publish as complete.
