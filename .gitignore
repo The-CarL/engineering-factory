@@ -1,0 +1,22 @@
+# Credentials and local overrides
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.aws/
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.auto.tfvars
+
+# Ephemeral agent checkouts and generated artifacts
+workspaces/
+.tmp/
+.cache/
+node_modules/
+dist/
+build/
+.vercel/
+.DS_Store
