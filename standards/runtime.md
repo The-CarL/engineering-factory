@@ -13,7 +13,7 @@ This standard governs environment installers, wrappers, startup checks and relea
 
 For every pinned provider tool, record the supported CLI/API path and actual injection transport, then test them together under approved read-only scope. Distinguish raw process credentials from HTTPS network-secret placeholders: client token validation or local request signing can require behavior that substitution cannot provide. Executable presence, a mock, or connector login proves neither transport compatibility nor authentication.
 
-Keep separate results for native CLI and direct API requests. Vercel REST success does not establish native Vercel CLI compatibility. Use a reviewed narrow adapter when needed; do not expose raw credentials, widen scopes or bypass controls merely to satisfy an existing script. Authentication changes require their own authorization.
+Use the reviewed [provider workflow contracts](../docs/provider-workflows.md) for classified failures, explicit transports, preview guards and recovery hashes. Keep separate results for native CLI and direct API requests. Vercel REST success does not establish native Vercel CLI compatibility. Use a reviewed narrow adapter when needed; do not expose raw credentials, widen scopes or bypass controls merely to satisfy an existing script. Authentication changes require their own authorization.
 
 ## Contracts and fail-fast gates
 

@@ -24,7 +24,7 @@ check_paths() {
   done
 }
 # Capture only intended data. Provider stderr may contain private context.
-gh_read() { GH_HOST=github.com gh api --hostname github.com "$@" 2>/dev/null || fail 'GitHub read failed; check authentication, scope, connectivity, and target privately.'; }
+gh_read() { python3 "$FACTORY_ROOT/scripts/lib/github-api.py" read "$@" || fail 'GitHub read failed; inspect the classified diagnostic.'; }
 check_identity() {
   need gh; need git; need python3
   IDENTITY="$(gh_read user --jq .login)"
@@ -35,6 +35,9 @@ lookup_repo() {
   local kind membership inventory
   check_identity
   kind="$(gh_read "users/$OWNER" --jq .type)"
+  # Shared output consumed by create-repo.sh.
+  # shellcheck disable=SC2034
+  OWNER_KIND="$kind"
   case "$kind" in
     User)
       [[ "$(printf %s "$IDENTITY" | tr '[:upper:]' '[:lower:]')" == "$(printf %s "$OWNER" | tr '[:upper:]' '[:lower:]')" ]] || fail 'Personal owner must match authenticated GitHub user.'
@@ -73,7 +76,7 @@ clone_verified() {
     return
   fi
   CLONE_TEMP="$(mktemp -d "$FACTORY_ROOT/workspaces/$WORKSPACE_OWNER/.clone.XXXXXX")"
-  GH_HOST=github.com gh repo clone "$TARGET" "$CLONE_TEMP/repo" >/dev/null 2>&1 || fail 'Clone failed; repository may exist remotely. Retry safely after fixing authentication or connectivity.'
+  python3 "$FACTORY_ROOT/scripts/lib/github-api.py" clone "$TARGET" "$CLONE_TEMP/repo" || fail 'Clone failed; repository may exist remotely. Retry safely after fixing authentication or connectivity.'
   verify_checkout "$CLONE_TEMP/repo"
   [[ ! -e "$CHECKOUT" && ! -L "$CHECKOUT" ]] || fail 'Checkout appeared during clone; inspect before retrying.'
   mv -- "$CLONE_TEMP/repo" "$CHECKOUT"

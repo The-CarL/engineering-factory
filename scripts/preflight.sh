@@ -2,12 +2,13 @@
 set -euo pipefail
 # shellcheck source=scripts/lib/common.sh
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/lib/common.sh"
-PROVIDERS=(); OFFLINE=false
+PROVIDERS=(); OFFLINE=false; VERCEL_TRANSPORT=cli
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --vercel-transport) [[ $# -ge 2 && ( "$2" == cli || "$2" == api ) ]] || fail 'Vercel transport must be cli or api.'; VERCEL_TRANSPORT="$2"; shift 2 ;;
     --offline) OFFLINE=true; shift ;;
     --provider) [[ $# -ge 2 ]] || fail 'Missing provider.'; case "$2" in github|vercel|aws) PROVIDERS+=("$2");; *) fail 'Provider must be github, vercel, or aws.';; esac; shift 2 ;;
-    --help|-h) printf 'Usage: preflight.sh [--offline] [--provider github|vercel|aws ...]\nDefault: tool inventory only; no network calls.\n'; exit 0 ;;
+    --help|-h) printf 'Usage: preflight.sh [--offline] [--provider github|vercel|aws ...] [--vercel-transport cli|api]\nDefault: tool inventory only; no network calls.\n'; exit 0 ;;
     *) fail 'Unknown option.' ;;
   esac
 done
@@ -29,12 +30,16 @@ for provider in "${PROVIDERS[@]}"; do
       lookup_repo
       printf 'GitHub: identity and approved owner inventory readable. Repository creation/push permissions UNVERIFIED.\n' ;;
     vercel)
+      if [[ "$VERCEL_TRANSPORT" == api ]]; then
+        python3 "$FACTORY_ROOT/scripts/vercel-preview.py" identity || fail 'Vercel REST identity gate failed.'
+        continue
+      fi
       need vercel
       [[ "${FACTORY_VERCEL_TEAM_ID:-}" =~ ^team_[A-Za-z0-9]+$ ]] || fail 'Set FACTORY_VERCEL_TEAM_ID for the approved sandbox team.'
       [[ "${FACTORY_VERCEL_TEAM_SLUG:-}" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*$ ]] || fail 'Set FACTORY_VERCEL_TEAM_SLUG.'
       response="$(VERCEL_TELEMETRY_DISABLED=1 vercel whoami --format json --scope "$FACTORY_VERCEL_TEAM_SLUG" --non-interactive 2>/dev/null)" || fail 'Vercel identity read failed; check CLI support and credentials privately.'
       printf %s "$response" | python3 "$FACTORY_ROOT/scripts/lib/json-check.py" vercel "$FACTORY_VERCEL_TEAM_ID" || fail 'Vercel effective team does not match approved team, or response cannot be verified.'
-      printf 'Vercel: authenticated principal and approved team verified. Linked project/deployment permissions UNVERIFIED.\n' ;;
+      printf 'Vercel native CLI: authenticated principal and approved team verified. Linked project/deployment permissions UNVERIFIED.\n' ;;
     aws)
       need aws
       [[ "${FACTORY_AWS_ACCOUNT_ID:-}" =~ ^[0-9]{12}$ ]] || fail 'Set FACTORY_AWS_ACCOUNT_ID.'
