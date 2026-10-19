@@ -12,7 +12,7 @@ Before approval, fill a private run record with:
 
 - Stable project/run IDs, purpose, source/runtime revision, expiry, cleanup owner and recovery destination. Preserve original creation attribution and known IDs when resuming.
 - Exact GitHub owner, repository name/visibility, clone location and expected origin. Specify permitted branches, normal pushes and CI; force pushes, visibility changes, deletion and unrelated repositories remain excluded.
-- Exact Vercel team ID/slug and the dedicated project name/known ID. For creation, bind the returned ID only after exact team/name readback; a matching name alone does not authorize adopting an existing project. Specify Authentication protection, permitted project configuration, build count, preview and health checks.
+- Exact Vercel team ID/slug and the dedicated project name/known ID. For creation, bind the returned ID only after exact team/name readback; a matching name alone does not authorize adopting an existing project. Specify the verified protection method/scope and enumerate generated deployment URLs, default production domains and aliases with their approved protected/public exposure, permitted project configuration, build count, preview and health checks.
 - Exact AWS account, assumed role, region, resource names/ARNs and service/actions from a reviewed policy/resource plan. Record its revision/hash and actual approval reference. Choosing a service is permission to prepare a plan, not to apply IAM or provision resources. A private S3 upload/readback test is a small possible target; it still requires concrete policy/resource review before writes.
 - A maximum incremental dollar budget, resource/build/upload counts, request/polling/time limits and retention period. Include provider-generated child/default resources in the inventory and estimate. No purchases, paid add-ons or upgrades unless explicitly included. Estimates and client counters are not provider-enforced spending limits; stop before an action could exceed the approved ceiling.
 - Exact network scope and authenticated health mechanism. Approval may include HTTPS checks to the single hostname returned by the verified new deployment and an exact-host allowlist update, if the platform permits it. Record that hostname before access; no wildcard domains, provider-token binding expansion or protection bypass.
@@ -20,7 +20,11 @@ Before approval, fill a private run record with:
 
 ## Test bootstrap is explicit scope
 
-Vercel's first deployment can be assigned production. A user can approve that known behavior in the initial concrete plan for a **new, dedicated test project**, with Authentication covering all deployment URLs before the bootstrap, test content only, no custom domains, no existing/core project changes, bounded cost and a retained rollback/recovery reference. This is approval of that one test bootstrap, not general production authority. Verify its actual target, source, provenance, protection and READY state before proceeding to preview.
+Vercel's first deployment can be assigned production. A user can approve that known behavior in the initial concrete plan for a **new, dedicated test project**, with a verified protection scope and explicitly approved URL exposure before the bootstrap, test content only, no custom domains, no existing/core project changes, bounded cost and a retained rollback/recovery reference. This is approval of that one test bootstrap, not general production authority. Verify its actual target, source, provenance, protection and READY state before proceeding to preview.
+
+Protection has both a method and a scope. [Standard Protection](https://vercel.com/docs/deployment-protection) excludes production domains; All Deployments includes them. Verify actual account/method availability and project settings rather than assuming Authentication covers every URL. Enumerate generated deployment URLs, default production domains and aliases; resolve assigned names and check plan coverage before serving content. Any publicly reachable test domain must be explicitly within the human-approved scope. If full protection is required but unavailable or unverified, prepare the exact alternative for review; do not upgrade a plan, add paid protection or weaken protection automatically.
+
+A flag such as `--skip-domain` does not prove first-deployment target behavior or a READY production baseline; require actual deployment/domain readback.
 
 The generic [preview helper](../docs/provider-workflows.md#vercel-preview-adapter) remains preview-only and blocks without a verified READY production baseline. An approved bootstrap uses a separately reviewed execution path; do not weaken the preview guard. If bootstrap was omitted from the approved scope, prepare the exact change for review before attempting it. An existing project's bootstrap needs its own exact project approval; the new-project option cannot be applied to it by analogy.
 
@@ -51,7 +55,12 @@ normal-push and run CI. No force push, visibility change, deletion or unrelated 
 
 Vercel: team [EXACT_TEAM_ID + SLUG], new dedicated test project [EXACT_NAME]
 [or exact retained PROJECT_ID with its existing inventory]. Resolve and retain its ID.
-Approved project configuration [EXACT_SETTINGS]; Authentication must cover all URLs.
+Approved project configuration [EXACT_SETTINGS]; protection method/scope [VERIFIED_SETTING].
+Enumerated generated deployment URLs [LIST + EXPOSURE], default production domains
+[LIST + EXPOSURE], aliases [LIST + EXPOSURE]. Any public test domain is explicitly
+approved here [EXACT_LIST / NONE]. Resolve assigned names and verify plan coverage
+before serving content. If required full protection is unavailable/unverified,
+prepare the exact plan for review; no automatic upgrades, paid protection or weakening.
 First production bootstrap: [YES, one protected test-only bootstrap on this NEW
 project under the reviewed plan / NO]. This excludes general production promotion,
 existing/core projects, custom domains and disabling protection. After a verified
