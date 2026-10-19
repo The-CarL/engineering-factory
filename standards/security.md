@@ -9,3 +9,13 @@
 - Pin Actions to full commit SHAs and downloaded tools to reviewed versions and hashes. Content-aware scanning supplements provider push protection; filenames alone cannot detect a secret in ordinary source.
 - Review scanner suppressions narrowly. Do not allowlist broad paths, whole histories, or live values to get CI green. On exposure, revoke first, assess logs/history/artifacts, then remediate under an approved plan.
 - Provider permissions enforce the boundary. AGENTS instructions, preflight scripts, default-private flags, and cost estimates guide behavior but cannot contain a compromised process with an overpowered identity.
+
+## Access exceptions
+
+The intended standard excludes core assets from runtime mutation scope. If effective access is broader, record the actual gap in a private reviewed exception register before relying on that identity. Do not describe intended exclusions as configured controls. The register must contain:
+
+- Exception reference, credential/role purpose, owner approval and approved task scope.
+- Effective actions/resources and evidence, including remaining core-asset exposure and indirect authority.
+- Compensating controls and their limits, expiry/review date, remediation owner/plan and verification evidence.
+
+Keep actual approvals, IDs and policies outside public Git. An exception documents accepted exposure; it does not authorize extra work, broaden a task or weaken controls. Stricter task scope continues to apply. No-delete flags, names/tags, agent instructions and wrapper allowlists do not establish core exclusion. Review [credential transport and AWS session discipline](runtime.md) separately from effective permissions.

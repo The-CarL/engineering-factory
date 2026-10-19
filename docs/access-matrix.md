@@ -1,6 +1,6 @@
 # Provider access design
 
-This is the Phase 3 target design. No credentials, policies, teams or live permission tests are implemented by these documents. Record exact private identifiers and approve operations before issuance. GitHub, Vercel and AWS identity preparation are all in Phase 3; each live write remains a separate bounded gate.
+This is the Phase 3 target design. No credentials, policies, teams or live permission tests are implemented by these documents. Record exact private identifiers and approve operations before issuance. Compare intended scope with effective access; document any gap in the private [security exception register](../standards/security.md#access-exceptions) without claiming unproven core isolation or expanding task scope. GitHub, Vercel and AWS identity preparation are all in Phase 3; each live write remains a separate bounded gate.
 
 | Provider | Allowed target design | Protected boundary | Pending decisions and evidence |
 |---|---|---|---|
@@ -10,7 +10,7 @@ This is the Phase 3 target design. No credentials, policies, teams or live permi
 
 ## AWS: shared account, separate authority
 
-The account is shared with existing infrastructure. Use a dedicated role, never the user's broad personal credentials. Start with an explicit service/action/resource/region allowlist, reserved project namespaces, and an explicit protected-resource inventory. Deny protected mutations as supported, covering updates, replacement, data writes and deletion. A blanket `Delete*` deny does not prevent overwrites or account changes and is not a complete policy.
+The account is shared with existing infrastructure. The intended bootstrap may only assume exact approved runtime roles; verify effective bootstrap/runtime policies, session identity and expiry separately. Keep temporary credentials in memory/child environments, without disk caches or argv secrets. Requested session length and wrapper allowlists are not enforced IAM limits. See [runtime session discipline](../standards/runtime.md#aws-sessions). DNS record writes remain a separately approved scope. Use a dedicated role, never the user's broad personal credentials. Start with an explicit service/action/resource/region allowlist, reserved project namespaces, and an explicit protected-resource inventory. Deny protected mutations as supported, covering updates, replacement, data writes and deletion. A blanket `Delete*` deny does not prevent overwrites or account changes and is not a complete policy.
 
 Review authorization support for every API: resource ARN constraints, request/resource tag conditions, tag-on-create and untaggable/child resources differ across services. Tags plus a name prefix alone do not safely confine an all-service role. Block the factory from retagging existing/core assets into its namespace or removing/changing protected ownership tags. Do not adopt assets without separate authorization. Apply the [provenance standard](../standards/provenance.md).
 
@@ -31,6 +31,8 @@ Current scripts require a user-backed `GET /user` identity and organization user
 Resource scoping is a token setup choice: choose the approved team or project and expiry, then verify installed CLI support and live readback. Availability, roles and any subscription cost need checking before setup; no new team or subscription is approved here.
 
 A team-scoped token reaches all projects in that team. It is unsuitable when core projects in the same team must be excluded. A project-scoped token denies access to other projects and user/team resources, but cannot provision unrelated projects. Automatic project creation therefore needs an isolated approved team or a separate bounded provisioning decision. A new sandbox team is an option, not a requirement already accepted by the user. Resource scope does not guarantee deployment-only or no-delete permissions inside the authorized project. [Vercel token scopes](https://vercel.com/docs/accounts/access-tokens).
+
+Verify the actual credential transport with the pinned native CLI and any API adapter independently. REST identity/team success does not prove native CLI compatibility; client-side token rejection is distinct from egress denial or provider authorization. Do not expose raw secrets or broaden scope as recovery.
 
 Project-scoped tokens deny user/team-level requests, so the current `whoami`/team-based preflight may not work with them. If needed, implement and review a narrow exact-project-read adapter before credential acceptance. Do not broaden a token to satisfy the existing script. No adapter is implemented in this documentation change.
 

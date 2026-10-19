@@ -4,7 +4,7 @@
 
 This repo may be read or forked publicly. It contains no live accounts, credentials, state, or private endpoints. Configuration names are public; their values and provider permissions live outside Git. Ignore rules, scanner checks, and instructions reduce mistakes but cannot enforce least privilege on a process holding broad credentials.
 
-Use provider-enforced scopes and exact approved targets; AWS uses bounded factory roles in the existing account, with protected core assets excluded. GitHub core content and Vercel core projects must also be outside runtime write scope. The [access matrix](access-matrix.md) documents unresolved scope choices and required effective-policy tests. Verify an exact GitHub owner, Vercel team/project, AWS role/account/region, allowed operations, expiry, budget, revocation owner, and rollback before any write. Record redacted evidence rather than raw auth diagnostics. Secrets must not appear in command arguments, logs, tests, PRs, artifacts, or shell tracing. Untrusted repository code must not run with an identity more powerful than its approved task.
+Use provider-enforced scopes and exact approved targets. The intended AWS design uses bounded factory roles in the existing account with protected core assets excluded; verify actual effective policies before claiming that boundary. GitHub core content and Vercel core projects must also be outside runtime write scope. The [access matrix](access-matrix.md) documents unresolved scope choices and required effective-policy tests. Verify an exact GitHub owner, Vercel team/project, AWS role/account/region, allowed operations, expiry, budget, revocation owner, and rollback before any write. Record redacted evidence rather than raw auth diagnostics. Secrets must not appear in command arguments, logs, tests, PRs, artifacts, or shell tracing. Untrusted repository code must not run with an identity more powerful than its approved task.
 
 Actions runs on pull requests and pushes with `contents: read`, credential persistence disabled, and no cloud/admin secrets. The required job performs lint, tests, policy checks, and content-aware scanning of source/history; full SHA-pinned GitHub-owned checkout and hash-pinned binaries avoid a third-party action allowlist dependency. Review changes to control-plane files and scanner configuration carefully; repository administrators ultimately control enforcement.
 
@@ -22,9 +22,13 @@ Actions default token permissions were read-only; PR creation/approval by Action
 
 ## Credential and deployment gates
 
-Credential issuance/injection, Cloud environment creation/publishing, provider writes, and live acceptance are separate upcoming gates. See [the checklist](credential-checklist.md). Existing local user sessions are not a mandate to reuse them in automation. Connectors and Cloud CLIs have independent authentication.
+Credential issuance/injection, environment save/publish/fresh-task acceptance, provider CLI/API reads, effective permission validation and live writes are separate gates. Keep their actual status in private release evidence rather than infer one from another. Follow [runtime contracts and session discipline](../standards/runtime.md). See [the checklist](credential-checklist.md). Existing local user sessions are not a mandate to reuse them in automation. Connectors and Cloud CLIs have independent authentication.
 
 App deployments should use native integration or per-app CI roles with narrow OIDC trust where supported. Do not export the factory's execution credentials into app GitHub secrets. Production promotion, deletion, expanded scope, and changes to IAM, organization settings, billing, or DNS need exact user authorization and a reviewable plan.
+
+## Explicit access exceptions
+
+Use the private [access exception register](../standards/security.md#access-exceptions) when actual authority exceeds the intended standard. Record owner approval, effective actions/resources, remaining core exposure, compensating controls, expiry/review/remediation and evidence. No-delete flags, names/tags, wrapper allowlists and agent instructions cannot establish core exclusion. An exception records exposure without expanding authorized task scope or permitting weakened controls.
 
 ## Incident and unknown outcomes
 

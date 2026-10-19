@@ -1,6 +1,6 @@
 # Project ownership and provenance
 
-Every managed infrastructure resource and Vercel deployment must resolve to one stable project and environment. This is a deployment acceptance requirement, including previews, experiments, indirect/child resources, and retries. Metadata identifies ownership; [provider permissions](../docs/access-matrix.md) enforce access. Tags alone do not authorize a change.
+Every managed infrastructure resource, Vercel deployment and reusable environment build artifact must resolve to one stable project and environment. This is a deployment acceptance requirement, including previews, experiments, indirect/child resources, and retries. Metadata identifies ownership; [provider permissions](../docs/access-matrix.md) enforce access. Tags alone do not authorize a change.
 
 ## Project record before writes
 
@@ -59,6 +59,12 @@ Maintain one per-project inventory plus append-only operation events in private 
 Persist intent before writes and reconcile readback afterward. Preserve creation and deletion history; do not remove a record because its resource was removed. After partial failures/timeouts, reconcile all known IDs and operation events before retrying or reporting success. Do not create duplicates or claim ownership from a matching name/tag alone.
 
 Correlate Git commits, deployment events and provider audit events (including CloudTrail where already available). Tags and local manifests are mutable unless separately protected; this standard does not make them tamperproof. Enabling new audit services or paid logging remains a separate authorized change.
+
+## Environment build artifacts
+
+Treat reviewed installers, wrappers, startup checks and prepared runtime snapshots as factory control-plane artifacts. Keep a private release manifest linking their exact source commit and configuration revision to the observed environment/snapshot revision or publish job, tool/base versions, retained-file hashes and startup/integrity results. Record provider identity/target reads and native CLI/API compatibility separately, along with approvals and outstanding write/deployment/mobile gates. Preserve original creation attribution and append later release/recovery events.
+
+Record saved, publishing, published and fresh-instance-accepted states distinctly. Keep the last confirmed release and recovery reference; reconcile known jobs/revisions after timeouts rather than create duplicates. Public Git holds generic reviewed source and this schema; actual environment IDs, private paths/targets and operation evidence stay private. See [runtime release acceptance](runtime.md#release-evidence-and-recovery).
 
 ## Find everything belonging to a project
 
