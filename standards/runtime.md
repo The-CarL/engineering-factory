@@ -2,6 +2,8 @@
 
 This standard governs environment installers, wrappers, startup checks and releases. It specifies acceptance requirements; adding it does not certify an existing private runtime or migrate private helpers into this repository. Apply [security](security.md), [testing](testing.md) and [provenance](provenance.md) alongside it.
 
+The versioned implementation is [runtime/install.py](../runtime/install.py), [runtime/start.py](../runtime/start.py) and the [provider launchers](../docs/runtime-commands.md). Its prepared-host contract, pinned downloads/lockfile and private integrity manifest are explicit; actual Cloud publication, credential transport and grants remain separate acceptance evidence.
+
 ## Source and portability
 
 - Version generic, reviewed installer/wrapper/check source in Git. Keep credentials, exact provider targets, private inventories and operation evidence outside public Git. Link each private configuration/release to its reviewed source commit.

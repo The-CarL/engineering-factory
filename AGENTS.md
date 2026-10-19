@@ -17,6 +17,7 @@ This public repository is a general engineering and hosting harness for independ
 - For a new app, use the local instruction seeder only after verifying its independent clone/target. It adds shared rules and an app-owned engineering contract. Integrate existing differing instructions deliberately. Implement the product, relevant checks/CI and hosting/operations contract in the app repository.
 - Choose the smallest suitable stack; pin dependencies/tool versions and commit lockfiles where applicable. Follow the target repo's conventions rather than imposing a universal stack.
 - Follow [runtime standards](standards/runtime.md) for versioned generic setup/wrapper source, private target configuration, actual credential transport, real CLI contracts, fresh-task integrity and environment release/recovery evidence. Documentation does not certify the current runtime.
+- Use the installed [runtime command paths](docs/runtime-commands.md) for selected provider work: `factory-aws` for assumed-role service reads/writes or explicitly trusted SDK/IaC execution, `factory-gh`/`factory-git` for selected GitHub credentials, and `factory-vercel` for recorded REST operations. Verify source/tool integrity first; preserve operation evidence privately. Provider permissions still determine actual grants.
 - Run the relevant checks. For this factory, use `make check`; authentication is unnecessary for tests. Report failed or skipped checks and explain their impact. Avoid tests that merely restate code.
 
 ## Credentials and external actions

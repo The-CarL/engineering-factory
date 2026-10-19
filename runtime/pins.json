@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "platform": "Linux-x86_64",
+  "host": {"git": "2.52.0", "python": "3.12.14", "node": "24.19.0", "npm": "11.9.0"},
+  "gh": {"version": "2.102.0", "url": "https://github.com/cli/cli/releases/download/v2.102.0/gh_2.102.0_linux_amd64.tar.gz", "sha256": "bb766f710eef8ede859c18578c72c327597cd4c8a85b06001b1f3843c6019386"},
+  "aws": {"version": "2.38.1", "url": "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.38.1.zip", "sha256": "b11ed416d91f4251da363a17706938eeaf0e520745754c104c0c1890dd8363c7"},
+  "vercel": {"version": "64.5.0", "lockfile": "runtime/vercel/package-lock.json"}
+}

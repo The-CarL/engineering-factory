@@ -2,6 +2,8 @@
 
 Use official CLIs where their actual credential transport works. `gh api` is the GitHub CLI's authenticated REST interface; AWS CLI stays behind the approved role wrapper. The narrow Vercel REST helper is an explicit alternative when a network-secret placeholder fails native CLI validation. Neither an API success nor a mocked test certifies a different transport. Credentials and approved targets come from private configuration; no helper logs in, broadens permissions, changes IAM, or copies credentials to an app.
 
+Use the versioned [runtime command paths](runtime-commands.md) for general provider operations. The AWS launcher forwards ordinary service reads/writes under verified assumed credentials and can run explicitly reviewed SDK/IaC tooling; its role permissions enforce effective scope. `factory-gh`/`factory-git` select one credential source. `factory-vercel` records a general project/config/deployment API operation; `vercel-preview.py` remains a separate narrower preview contract.
+
 Use [project guidance](new-project.md) and [bounded project work](../standards/bounded-runs.md) to agree applicable consequential scope and execute routine work with minimal interactions. Select provider operations from the app's needs, include resource/budget limits and any chat-recipient authority, and preserve provider permissions/platform approvals.
 
 ## GitHub creation and recovery

@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "host_contract": "Linux x86_64 prepared host; versions in runtime/pins.json",
+  "private_configuration_names": [
+    "FACTORY_SOURCE_REPOSITORY",
+    "FACTORY_SOURCE_REVISION",
+    "FACTORY_RUNTIME_DIRECTORY",
+    "FACTORY_RUNTIME_MANIFEST",
+    "FACTORY_PRIVATE_ROOT",
+    "FACTORY_GITHUB_OWNER",
+    "FACTORY_GITHUB_CREDENTIAL_SOURCE",
+    "FACTORY_VERCEL_TEAM_ID",
+    "FACTORY_VERCEL_TEAM_SLUG",
+    "FACTORY_AWS_ACCOUNT_ID",
+    "FACTORY_AWS_ROLE_NAME",
+    "FACTORY_AWS_REGION",
+    "FACTORY_AWS_SESSION_SECONDS",
+    "FACTORY_PROJECT_ID",
+    "FACTORY_ENVIRONMENT",
+    "FACTORY_AWS_EXECUTABLE",
+    "FACTORY_AWS_EXECUTABLE_SHA256",
+    "FACTORY_AWS_APP_BOUNDARY_ARN",
+    "FACTORY_AWS_APP_POLICY_ARN"
+  ],
+  "personal_binding_design": [
+    {
+      "name": "FACTORY_GITHUB_TOKEN",
+      "mechanism": "network secret",
+      "https_recipients": [
+        "api.github.com",
+        "github.com"
+      ]
+    },
+    {
+      "name": "VERCEL_TOKEN",
+      "mechanism": "network secret",
+      "https_recipients": [
+        "api.vercel.com"
+      ]
+    },
+    {
+      "name": "AWS_ACCESS_KEY_ID",
+      "mechanism": "direct signing bootstrap environment binding"
+    },
+    {
+      "name": "AWS_SECRET_ACCESS_KEY",
+      "mechanism": "direct signing bootstrap environment binding"
+    },
+    {
+      "name": "AWS_SESSION_TOKEN",
+      "mechanism": "optional direct bootstrap session binding"
+    }
+  ],
+  "setup_entries": [
+    "python3 runtime/start.py --refresh --source-only",
+    "python3 runtime/install.py --destination $FACTORY_RUNTIME_DIRECTORY"
+  ],
+  "startup_entry": "python3 runtime/start.py",
+  "command_directory": "$FACTORY_RUNTIME_DIRECTORY/bin",
+  "notes": "Names and design only; no credentials, private target values or environment configuration are applied by this file. Explicit Cloud source selection uses FACTORY_GITHUB_CREDENTIAL_SOURCE=factory-token."
+}
