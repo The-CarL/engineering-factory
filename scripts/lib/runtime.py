@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
+import tempfile
 import subprocess
 import sys
 
@@ -52,7 +54,7 @@ def local_git(*args):
 
 def source_files():
     names = local_git('ls-files', '--cached', '--others', '--exclude-standard', '--',
-                      'runtime', 'scripts/runtime', 'scripts/lib/runtime.py', 'scripts/lib/provider.py').splitlines()
+                      'runtime', 'scripts/runtime', 'scripts/lib/runtime.py', 'scripts/lib/provider.py', 'scripts/lib/context.py').splitlines()
     return sorted(set(names))
 
 
@@ -115,7 +117,12 @@ def event(path, state, **fields):
 
 
 class Operation:
-    def __init__(self, record, output, provider, request):
+    def __init__(self, record, output, provider, request, contextual=True):
+        from context import preflight
+        if contextual:
+            preflight()
+        self.contextual = contextual and bool(os.environ.get('FACTORY_PROJECT_REPOSITORY'))
+        self.completed = False
         self.record = private_path(record)
         self.output = private_path(output)
         require(self.record != self.output, 'Operation record and output must differ')
@@ -130,20 +137,34 @@ class Operation:
         self.output.write_bytes(data)
         event(self.record, 'response-received', response_sha256=digest(data), size=len(data))
 
-    def finish(self, data, secrets=(), quiet=False):
+    def finish(self, data, secrets=(), quiet=False, persist=True):
         self.received(data, secrets)
         event(self.record, 'complete', response_sha256=digest(data), size=len(data))
+        self.completed = True
+        if persist and self.contextual:
+            from context import automatic
+            automatic(self.record)
         if not quiet:
             print('Operation complete; response and evidence retained privately.')
 
     def failed(self):
+        if self.completed:
+            return  # Provider completion must not become an unknown mutation because context sync failed.
         event(self.record, 'failed-or-unknown', detail='Reconcile provider state before another mutation')
+        try:
+            from context import automatic
+            if self.contextual:
+                automatic(self.record)
+        except ProviderError:
+            print('WARNING: Provider outcome and durable context need reconciliation; local evidence preserved.', file=sys.stderr)
 
 
 def load():
     _, revision, files = check_source()
-    path = Path(os.environ.get('FACTORY_RUNTIME_MANIFEST', ''))
-    require(path.is_absolute() and path.is_file() and not path.is_symlink() and path.stat().st_mode & 0o077 == 0,
+    directory = os.environ.get('FACTORY_RUNTIME_DIRECTORY', '')
+    path = Path(os.environ.get('FACTORY_RUNTIME_MANIFEST') or (str(Path(directory) / 'manifest.json') if directory else ''))
+    require(not directory or path == Path(directory) / 'manifest.json', 'Manifest differs from selected installed release')
+    require(path.is_absolute() and path.is_file() and '..' not in path.parts and not any(p.is_symlink() for p in (path, *path.parents)) and path.stat().st_mode & 0o077 == 0,
             'Set the installed private FACTORY_RUNTIME_MANIFEST')
     manifest = json.loads(path.read_bytes())
     require(manifest.get('schema') == 1 and manifest.get('revision') == revision and manifest.get('source') == files,
@@ -170,6 +191,38 @@ def load():
         tools[name] = str(executable.resolve())
     require(set(tools) == {'aws', 'gh', 'git', 'python', 'node', 'npm', 'vercel'}, 'Runtime tool manifest is incomplete')
     return tools
+
+
+def write_environment(value, tools, project=None):
+    path = Path(value)
+    private_path(path, existing=path.exists())
+    marker = '# Generated engineering-factory activation; no credentials.\n'
+    require(not path.exists() or path.read_text().startswith(marker), 'Refusing to replace an unrelated private file')
+    manifest = Path(os.environ.get('FACTORY_RUNTIME_MANIFEST') or Path(os.environ['FACTORY_RUNTIME_DIRECTORY']) / 'manifest.json')
+    source = os.environ.get('FACTORY_GITHUB_CREDENTIAL_SOURCE', 'factory-token')
+    require(source in ('factory-token', 'cli'), 'Select factory-token or explicitly approved local cli authentication')
+    directories = [str(manifest.parent / 'bin'), str(manifest.parent / 'vercel/node_modules/.bin')] + [str(Path(tools[name]).parent) for name in ('aws', 'node', 'python', 'git')] + ['/usr/bin', '/bin']
+    values = dict(FACTORY_RUNTIME_DIRECTORY=str(manifest.parent), FACTORY_RUNTIME_MANIFEST=str(manifest),
+                  FACTORY_SOURCE_REPOSITORY=os.environ['FACTORY_SOURCE_REPOSITORY'],
+                  FACTORY_SOURCE_REVISION=os.environ['FACTORY_SOURCE_REVISION'],
+                  FACTORY_PRIVATE_ROOT=os.environ['FACTORY_PRIVATE_ROOT'],
+                  FACTORY_GITHUB_CREDENTIAL_SOURCE=source, PATH=os.pathsep.join(dict.fromkeys(directories)))
+    for name in ('FACTORY_CONTEXT_REPOSITORY', 'FACTORY_CONTEXT_DIRECTORY', 'FACTORY_PROJECT_REPOSITORY'):
+        if os.environ.get(name):
+            values[name] = os.environ[name]
+    values.update(project or {})
+    text = marker + ''.join('export ' + key + '=' + shlex.quote(value) + '\n' for key, value in sorted(values.items()))
+    require(not any(secret and secret in text for secret in known_credentials()), 'Credential-like activation content rejected')
+    descriptor, temporary = tempfile.mkstemp(prefix='.factory-env-', dir=path.parent)
+    try:
+        with os.fdopen(descriptor, 'w') as output:
+            output.write(text)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def run(command, env, provider, timeout=120, input=None, cwd=None):

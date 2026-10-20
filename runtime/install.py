@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install a versioned Linux prepared-host runtime; never retain credentials."""
+"""Bootstrap a versioned runtime on a supported Linux base; never retain credentials."""
 import json
 import os
 from pathlib import Path
@@ -29,11 +29,62 @@ def download(pin, destination):
 def version(command, expected, env):
     result = subprocess.run(command, env=env, capture_output=True, timeout=120)
     require(result.returncode == 0 and re.search(r'(?<![0-9.])' + re.escape(expected) + r'(?![0-9A-Za-z.+-])', result.stdout.decode(errors='replace') + result.stderr.decode(errors='replace')),
-            'Prepared host/tool version does not match reviewed pins')
+            'Tool version does not match reviewed pins')
+
+
+def host_tools(pins, env):
+    host = {'git': shutil.which('git', path=env['PATH']), 'python': str(Path(sys.executable).resolve())}
+    require(host['git'], 'Supported base requires system Git; no ambient wrapper fallback')
+    host['git'] = str(Path(host['git']).resolve())
+    observed = {}
+    for name in ('git', 'python'):
+        result = subprocess.run([host[name], '--version'], env=env, capture_output=True, timeout=30)
+        match = re.search(r'(\d+\.\d+\.\d+)', (result.stdout + result.stderr).decode(errors='replace'))
+        require(result.returncode == 0 and match, 'Base Git/Python version cannot be verified')
+        observed[name] = match[1]
+        require(tuple(map(int, match[1].split('.'))) >= tuple(map(int, pins['host'][name + '_minimum'].split('.'))),
+                'Base Git/Python is older than the supported capability floor')
+    libc, number = platform.libc_ver()
+    require(libc == 'glibc' and re.fullmatch(r'\d+\.\d+', number)
+            and tuple(map(int, number.split('.'))) >= tuple(map(int, pins['host']['glibc_minimum'].split('.'))),
+            'Supported base requires the reviewed glibc capability floor')
+    observed['glibc'] = number
+    return host, observed
+
+
+def unpack_node(archive_path, destination, pin):
+    prefix = 'node-v' + pin['version'] + '-linux-x64'
+    with tarfile.open(archive_path) as archive:
+        members = archive.getmembers()
+        require(len(members) <= 20000 and sum(item.size for item in members) <= 512 * 1024 * 1024,
+                'Node archive exceeds extraction bounds')
+        for item in members:
+            path = Path(item.name)
+            require(not path.is_absolute() and '..' not in path.parts and path.parts[0] == prefix
+                    and (item.isfile() or item.isdir() or item.issym()), 'Unsafe Node archive member')
+            if item.issym():
+                target = Path(item.linkname)
+                require(not target.is_absolute() and (destination / path.parent / target).resolve().is_relative_to(destination / prefix),
+                        'Node archive symlink escapes release')
+        # Validate the complete archive before extraction; the destination is a new private stage.
+        for item in members:
+            output = destination / item.name
+            require(output.parent.resolve().is_relative_to(destination.resolve()), 'Node archive parent escapes stage')
+            if item.isdir():
+                output.mkdir(parents=True, exist_ok=True)
+            elif item.issym():
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.symlink_to(item.linkname)
+            else:
+                output.parent.mkdir(parents=True, exist_ok=True)
+                with output.open('xb') as stream:
+                    shutil.copyfileobj(archive.extractfile(item), stream)
+                output.chmod(0o755 if item.mode & 0o111 else 0o644)
+    return destination / prefix
 
 
 def install(destination):
-    require(platform.system() == 'Linux' and platform.machine() == 'x86_64', 'Runtime requires the reviewed Linux x86_64 prepared host')
+    require(platform.system() == 'Linux' and platform.machine() == 'x86_64', 'Runtime requires the supported Linux x86_64 base')
     repo, revision, sources = check_source()
     pins = json.loads((ROOT / 'runtime/pins.json').read_text())
     require(destination.is_absolute() and '..' not in destination.parts
@@ -45,17 +96,23 @@ def install(destination):
     with tempfile.TemporaryDirectory(prefix='.factory-install-', dir=destination.parent) as temporary:
         stage = Path(temporary)
         env = base_env(stage)
-        host = {name: str(Path(shutil.which(executable) or '').resolve()) for name, executable in
-                (('git', 'git'), ('python', 'python3'), ('node', 'node'), ('npm', 'npm'))}
-        for name in ('git', 'python', 'node'):
-            version([host[name], '--version'], pins['host'][name], env)
-        version([host['node'], host['npm'], '--version'], pins['host']['npm'], env)
+        host, base_versions = host_tools(pins, env)
+        print('factory-setup base-verified', flush=True)
         gh_archive, aws_archive = stage / 'gh.tar.gz', stage / 'aws.zip'
+        print('factory-setup download-gh', flush=True)
         download(pins['gh'], gh_archive)
+        print('factory-setup download-aws', flush=True)
         download(pins['aws'], aws_archive)
         release = stage / 'release'
         release.mkdir(mode=0o700)
         (release / 'bin').mkdir()
+        node_archive = stage / 'node.tar.xz'
+        print('factory-setup download-node', flush=True)
+        download(pins['node'], node_archive)
+        unpack_node(node_archive, stage, pins['node']).rename(release / 'node')
+        host.update(node=str(release / 'node/bin/node'), npm=str(release / 'node/lib/node_modules/npm/bin/npm-cli.js'))
+        version([host['node'], '--version'], pins['node']['version'], env)
+        version([host['node'], host['npm'], '--version'], pins['node']['npm_version'], env)
         with tarfile.open(gh_archive) as archive:
             member = archive.getmember('gh_' + pins['gh']['version'] + '_linux_amd64/bin/gh')
             require(member.isfile(), 'Unexpected gh archive member')
@@ -88,18 +145,20 @@ def install(destination):
             (stage / name).touch(mode=0o600)
         npm_env = dict(env, npm_config_cache=str(stage / 'npm-cache'), npm_config_userconfig=str(stage / 'user-npmrc'),
                        npm_config_globalconfig=str(stage / 'global-npmrc'), npm_config_registry='https://registry.npmjs.org')
+        print('factory-setup install-locked-vercel', flush=True)
         result = subprocess.run([host['node'], host['npm'], 'ci', '--ignore-scripts', '--no-audit', '--no-fund', '--omit=dev'],
                                 cwd=release / 'vercel', env=npm_env, capture_output=True, timeout=600)
         require(result.returncode == 0, 'Locked Vercel installation failed; detail withheld')
-        paths = dict(host, gh='bin/gh', aws='aws/v2/current/bin/aws', vercel='vercel/node_modules/vercel/dist/index.js')
+        paths = dict(host, node='node/bin/node', npm='node/lib/node_modules/npm/bin/npm-cli.js', gh='bin/gh', aws='aws/v2/current/bin/aws', vercel='vercel/node_modules/vercel/dist/index.js')
         version([str(release / paths['gh']), '--version'], pins['gh']['version'], env)
         version([str(release / paths['aws']), '--version'], 'aws-cli/' + pins['aws']['version'], env)
         version([host['node'], str(release / paths['vercel']), '--version'], pins['vercel']['version'], env)
-        for name, script, mode in (('factory-aws', 'aws.py', []), ('factory-gh', 'github.py', ['gh']),
+        for name, script, mode in (('factory-project', 'project.py', []), ('factory-aws', 'aws.py', []), ('factory-gh', 'github.py', ['gh']),
                                    ('factory-git', 'github.py', ['git']), ('factory-vercel', 'vercel.py', [])):
             content = '#!' + host['python'] + '\nimport os,sys\nos.execv(' + repr(host['python']) + ', [' + repr(host['python']) + ', ' + repr(str(ROOT / 'scripts/runtime' / script)) + ', *' + repr(mode) + ', *sys.argv[1:]])\n'
             (release / 'bin' / name).write_text(content)
             (release / 'bin' / name).chmod(0o755)
+        print('factory-setup verify-retained-files', flush=True)
         files = {}
         for item in sorted(release.rglob('*')):
             if item.is_symlink():
@@ -111,11 +170,11 @@ def install(destination):
         for name, path in paths.items():
             item = Path(path) if Path(path).is_absolute() else release / path
             tools[name] = {'path': path, 'sha256': digest(item.read_bytes())}
-        manifest = dict(schema=1, repository=repo, revision=revision, source=sources, tools=tools, files=files, pins=pins)
+        manifest = dict(schema=1, base_versions=base_versions, repository=repo, revision=revision, source=sources, tools=tools, files=files, pins=pins)
         (release / 'manifest.json').write_text(json.dumps(manifest, sort_keys=True) + '\n')
         (release / 'manifest.json').chmod(0o600)
         release.rename(destination)
-    print('Runtime installed. Configure its private manifest path and run startup verification before use.')
+    print('Runtime installed; startup and activation must verify the selected release before use.')
 
 
 def main():

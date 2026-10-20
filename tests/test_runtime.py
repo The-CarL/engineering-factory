@@ -81,7 +81,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_aws_forwards_write_with_only_verified_assumed_credentials_and_tags(self):
         project = str(uuid.uuid4())
-        os.environ.update(FACTORY_PROJECT_ID=project, FACTORY_ENVIRONMENT='development', AWS_PROFILE='personal',
+        os.environ.update(FACTORY_PROJECT_ID=project, FACTORY_ENVIRONMENT='development', FACTORY_AWS_SCOPE='untrusted-independent-override', AWS_PROFILE='personal',
                           AWS_ENDPOINT_URL='https://wrong.invalid', AWS_WEB_IDENTITY_TOKEN_FILE='/private/token',
                           AWS_CONTAINER_CREDENTIALS_FULL_URI='http://wrong.invalid', AWS_DATA_PATH='/untrusted',
                           GH_DEBUG='api', GIT_TRACE='1')
@@ -89,6 +89,9 @@ class RuntimeTests(unittest.TestCase):
         assume, _, service = self.calls
         self.assertIn('Key=factory:project-id,Value=' + project, assume[0])
         self.assertIn('Key=factory:managed-by,Value=engineering-factory', assume[0])
+        self.assertIn('Key=factory:scope,Value=' + project + '-development', assume[0])
+        self.assertNotIn('untrusted-independent-override', ' '.join(assume[0]))
+        self.assertNotIn('FACTORY_AWS_SCOPE', service[1])
         self.assertEqual(service[0][1:3], ['s3api', 'create-bucket'])
         self.assertEqual(service[1]['AWS_SESSION_TOKEN'], self.session)
         for key in ('AWS_PROFILE', 'AWS_ENDPOINT_URL', 'AWS_WEB_IDENTITY_TOKEN_FILE', 'AWS_CONTAINER_CREDENTIALS_FULL_URI', 'AWS_DATA_PATH', 'GH_TOKEN', 'FACTORY_GITHUB_TOKEN', 'GH_DEBUG'):

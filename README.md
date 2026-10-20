@@ -4,6 +4,16 @@ A conversational engineering workspace for going from an idea through collaborat
 
 Start with [conversational delivery](standards/conversational-delivery.md) and [Create or continue an application](docs/new-project.md). The agent leads design, asks consequential questions early, infers routine details, explicitly postpones decisions that can wait, and owns delivery through relevant checks and hosting. The user should not have to supply a complete specification or discover blockers through repeated status requests. The factory supplies shared rules, focused helpers and provider contracts; apps own their implementation and operating records.
 
+## Default Cloud setup
+
+For this factory Cloud environment, install the operational provider runtime by default. Local lint/tests are necessary and do not replace pinned GitHub/AWS/Vercel tooling. The onboarding agent verifies the exact factory origin, clean reviewed `main` commit and instructions, then runs one credential-free entry with that reviewed full SHA:
+
+```bash
+python3 runtime/setup.py --source-revision FULL_REVIEWED_COMMIT
+```
+
+The command verifies source, prepares pinned Node/npm and provider tools from a supported Linux Git/Python base, selects a private versioned release and writes activation. It does not auto-trust HEAD, configure personal credentials or publish Cloud. Apply the generated activation to task commands and verify startup. Report missing credential/target, narrow network execution, effective-grant and real write/fresh-task gates explicitly; do not classify core AWS/Vercel runtime as optional or declare readiness from repository checks. See [actual setup/start commands](docs/runtime-commands.md#cloud-base-bootstrap-and-startup).
+
 ## Available capabilities
 
 | Capability | Helper / ownership |
@@ -11,8 +21,9 @@ Start with [conversational delivery](standards/conversational-delivery.md) and [
 | GitHub repository creation and clone | `create-repo.sh` / `clone-repo.sh`: explicit target, inventory/origin/visibility checks and recovery; private by default, offline dry-run available. |
 | Shared app instructions | `seed-project.py`: only AGENTS.md, CLAUDE.md and ENGINEERING.md in a verified independent clone; preserves differing user files. |
 | Provider identity and credential-source checks | `preflight.sh` and reviewed transport helpers; reads do not prove write permissions. |
-| Versioned execution runtime | `runtime/install.py` / `start.py`: Linux prepared-host tool pins and integrity manifest; `factory-aws`, `factory-gh`, `factory-git`, `factory-vercel` command paths for approved operations. |
+| Versioned execution runtime | `runtime/setup.py` / `start.py`: supported-base bootstrap, pinned provider tools and integrity manifest; `factory-aws`, `factory-gh`, `factory-git`, `factory-vercel` command paths for approved operations. |
 | Vercel hosting operations | Reviewed official CLI/REST contracts for projects selecting Vercel. `vercel-preview.py` supports authorized previews with a protected exact project, verified READY production baseline, source/provenance checks and operation recovery. |
+| Durable project context | `factory-project`: explicitly selected private Git storage for structured project config, safe journals, ownership receipts and typed resource inventory; verified restore and optimistic checkpoint/reconcile. |
 | Private recovery integrity | `recovery-manifest.py`: hashes/verification for selected files; durable export/restore uses the project's approved destination. |
 | Application engineering and hosting | Agent-owned work: suitable components, dependencies, relevant checks, independent CI/CD and reviewed provider CLI/API/IaC operations. |
 

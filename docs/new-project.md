@@ -29,7 +29,7 @@ python3 scripts/seed-project.py \
   --repo approved-owner/my-app --confirm approved-owner/my-app
 ```
 
-It writes only `AGENTS.md`, `CLAUDE.md` and `ENGINEERING.md`. Local Git checks reject factory targets, linked worktrees, unsafe origins and symlinks; all outputs are checked before writes. Matching repeats are no-ops; differing existing instructions require deliberate integration. The helper, templates, application standard and conversational-delivery standard must match a committed factory revision. It generates no app/CI code, executes no hooks and performs no authentication or network calls.
+It writes only `AGENTS.md`, `CLAUDE.md` and `ENGINEERING.md`. Local Git checks reject factory targets, linked worktrees, unsafe origins and symlinks; all outputs are checked before writes. Matching instruction repeats preserve files; differing existing instructions require deliberate integration. The helper, templates, application standard and conversational-delivery standard must match a committed factory revision. It generates no app/CI code and executes no hooks. Without an explicitly configured context backend it performs no network calls; with that backend it also initializes/synchronizes the verified app context. Dry-run remains offline. Apply generated project activation for [durable continuity](continuity.md).
 
 ## Implementation, hosting and evidence
 

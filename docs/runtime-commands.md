@@ -12,23 +12,34 @@ The flushed `execution-start` marker precedes probes; separate probe markers and
 
 For a fresh published task, verify the **executing** checkout/reviewed revision, selected configuration and retained runtime integrity, then the selected provider's actual credential transport and effective grants. Source CI, a saved/published setting or an older snapshot's success cannot certify another task. A blocked or untested gate stays blocked or untested; do not start mutations to diagnose it.
 
-## Prepared-host installation and startup
+## Cloud-base bootstrap and startup
 
-`runtime/pins.json` targets Linux x86_64 with prepared Git 2.52.0, Python 3.12.14, Node 24.19.0 and npm 11.9.0. The installer verifies those host versions, official gh 2.102.0 and AWS CLI 2.38.1 archive SHA256 pins, and the Vercel 64.5.0 npm lockfile. It uses credential-free child environments and `npm ci --ignore-scripts`; it does not bootstrap an empty OS, install host languages, run package hooks or retain download caches. Archive pins select the official distribution artifacts. Pin changes require independent hash/signature review against the publisher, including the official AWS signature.
+`runtime/setup.py` prepares a new immutable Linux x86_64 release from system Git >=2.39, Python >=3.10 and glibc >=2.28. Node/npm need not be preinstalled. `runtime/pins.json` selects the official Node 24.19.0 Linux archive and its reviewed [publisher checksum](https://nodejs.org/dist/v24.19.0/SHASUMS256.txt), including bundled npm 11.17.0; existing gh 2.102.0/AWS CLI 2.38.1 archive pins and the Vercel 64.5.0 lock remain enforced. Downloads and `npm ci --ignore-scripts` run without provider credentials or package hooks. Base Git/Python exact versions and executable hashes are retained alongside installed files; this is a supported-base bootstrap, not an empty-OS installer. Review publisher integrity evidence when changing pins, including the official AWS signature.
 
-Use a clean approved factory checkout and private configuration described by the names-only [environment design](../runtime/environment.example.json). `FACTORY_SOURCE_REPOSITORY` is the exact GitHub owner/repo; `FACTORY_SOURCE_REVISION` is a reviewed full commit. Setup can refresh only a clean exact HTTPS factory `main` checkout by fast-forward to that approved commit reachable from remote main. It never resets, switches branches, overwrites dirty files or chooses a newer revision implicitly.
-
-For an initial checkout whose revision predates these runtime files, prepare a separate clean checkout at the reviewed commit using the host's approved Git path, verify its origin/commit and read its instructions before running this installer. The startup command becomes available in that checkout; it cannot upgrade source that does not contain it. Preserve an older or dirty checkout separately.
+The single onboarding entry is `python3 runtime/setup.py --source-revision FULL_REVIEWED_COMMIT`: the onboarding agent supplies the verified reviewed pin, never arbitrary HEAD. Without saved selectors it infers the exact credential-free GitHub origin and chooses ignored private/versioned directories; explicit private paths remain configurable. Use a clean approved checkout and the names-only [environment design](../runtime/environment.example.json). `FACTORY_SOURCE_REPOSITORY` and full `FACTORY_SOURCE_REVISION` select source; `FACTORY_RUNTIME_DIRECTORY` selects a new release; `FACTORY_PRIVATE_ROOT` selects private state. Setup can create those selected directory parents without changing unrelated configuration. An existing release is verified and reused; a stale/tampered release stops without reinstalling or replacing it. Interrupted staged installs leave the last confirmed release untouched.
 
 ```bash
 python3 runtime/start.py --refresh --source-only
-python3 runtime/install.py --destination "$FACTORY_RUNTIME_DIRECTORY"
-python3 runtime/start.py
+python3 runtime/setup.py
+. "$FACTORY_PRIVATE_ROOT/runtime.env"
 ```
 
-Choose a new versioned runtime directory in ignored/private storage. Set `FACTORY_RUNTIME_MANIFEST` to its `manifest.json`, and put its `bin` directory on the task's PATH. Installation refuses to overwrite an existing directory. Startup and each command verify source revision/committed bytes, retained file hashes/modes/symlinks and tool executable hashes. A changed source revision needs a matching installed release; stale/missing artifacts stop execution. Hash manifests are integrity records, not independent authenticity if an attacker can replace both files and hashes. The prepared host, its system libraries and approved private configuration remain trusted inputs.
+Refresh only fast-forwards a clean exact HTTPS factory `main` checkout to the reviewed commit reachable from remote main; it never resets or implicitly chooses a revision. If the checkout predates runtime source, first prepare a separate clean checkout at the approved commit using the supported system Git. Preserve older/dirty checkouts.
 
-After refresh, read the current `AGENTS.md` and relevant standards before actions. Record source/runtime revision, setup/save/publication and fresh-task results separately. This source does not publish Cloud, modify personal bindings or certify the current live environment.
+For every new task:
+
+```bash
+python3 runtime/start.py --environment-file "$FACTORY_PRIVATE_ROOT/runtime.env"
+. "$FACTORY_PRIVATE_ROOT/runtime.env"
+```
+
+The generated mode-600 activation contains only exact source/release selectors, selected project targets and a controlled PATH. It exposes the installed native Vercel `.bin` entry with the pinned Node runtime and prefers native AWS/Node binaries plus the factory command directory, excluding old PATH shims; no `aws` wrapper is installed over the native executable. It explicitly defaults GitHub selection to `factory-token`, so an ambient ephemeral token cannot silently become the Cloud identity. Explicit `cli` selection remains available for reviewed local hosts. The host must apply activation to actual task commands; sourcing in an unrelated setup subprocess alone does not establish task environment inheritance.
+
+Startup and provider commands verify source bytes, manifest, retained files/modes/symlinks and executable hashes. A source change requires a matching release. Read current `AGENTS.md` after refresh. Hashes are integrity records, not independent authenticity if both artifacts and manifests can be replaced. Actual publication and fresh-task checks remain separate evidence.
+
+Network execution also depends on the host's action-time policy. If ordinary sandbox execution cannot open sockets, request the supported narrowly scoped network grant for the specific download/provider action; a domain allowlist alone is insufficient. Do not silently change client configuration or use blanket escalation. Keep OS/socket, egress, authentication and provider-permission evidence distinct.
+
+See [durable project continuity](continuity.md) for optional private Git context storage, automatic operation checkpoints and selected-project restoration.
 
 ## Private operations
 
@@ -47,7 +58,7 @@ The [STS AssumeRole contract](https://docs.aws.amazon.com/cli/latest/reference/s
 
 Ambient profiles, config files, container/instance metadata, web identity, endpoint overrides and debug sources are excluded. CLI profile/region/endpoint/TLS/debug overrides, unsigned requests and alternate STS/auth flows are rejected. Bootstrap credentials never reach service children; assumed credentials remain in memory/child environments, with no credential cache, token output or fallback identity. The private role's IAM/resource policies still determine which service actions succeed.
 
-For project context, set canonical nonzero UUID `FACTORY_PROJECT_ID` and validated `FACTORY_ENVIRONMENT` together. The role request supplies fixed `factory:managed-by=engineering-factory`, `factory:project-id`, `factory:environment` and derived `factory:scope=<UUID>-<environment>` session tags. Environments reject consecutive hyphens and the reserved component `r`; resource namespaces use `factory-<scope>-r-` to separate the environment from the resource suffix. This needs separately approved bootstrap `sts:TagSession` and compatible role trust/policies. Context-free preflight can omit both when IAM permits. Session tags do not grant actions or replace resource/deployment provenance.
+For project context, set canonical nonzero UUID `FACTORY_PROJECT_ID` and validated `FACTORY_ENVIRONMENT` together. The role request supplies fixed `factory:managed-by=engineering-factory`, `factory:project-id` and `factory:environment` session tags, plus `factory:scope` derived as UUID-environment. Scope has no independent user input; trusted exec receives only that derived `FACTORY_AWS_SCOPE`. This needs separately approved bootstrap `sts:TagSession` and compatible role trust/policies. Context-free preflight can omit both when IAM permits. Session tags do not grant actions or replace resource/deployment provenance.
 
 The optional [AWS application permission profile](../infra/aws/README.md) renders a bounded reusable service/role policy set for administrator review. Rendering grants nothing; actual Access Analyzer validation, complete policy/boundary simulation, installation and real service-context verification are separate evidence. Its general cross-service grant supports selected workloads without a short service allowlist; review its protected inventory, fixed IAM boundary and documented authorization limits.
 

@@ -15,6 +15,8 @@ from runtime import Operation, Parser, base_env, cli, digest, event, known_crede
 
 def execute(args):
     tools = load()
+    from context import preflight
+    preflight(tools)
     account, role, region = (os.environ.get('FACTORY_AWS_' + key, '') for key in ('ACCOUNT_ID', 'ROLE_NAME', 'REGION'))
     require(re.fullmatch(r'[0-9]{12}', account) and account != '000000000000'
             and re.fullmatch(r'[A-Za-z0-9+=,.@_-]{1,64}', role)
@@ -43,12 +45,15 @@ def execute(args):
     require(bootstrap['AWS_ACCESS_KEY_ID'] and bootstrap['AWS_SECRET_ACCESS_KEY'], 'Direct AWS bootstrap signing bindings are required')
     require(not any(value and value in arg for value in known_credentials() for arg in command), 'Credential argument rejected')
     tags = []
+    scope = ''
     project, environment = os.environ.get('FACTORY_PROJECT_ID', ''), os.environ.get('FACTORY_ENVIRONMENT', '')
     if project or environment:
         require(str(uuid.UUID(project)) == project and uuid.UUID(project).int != 0
                 and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', environment), 'Set both validated project/environment session context values')
+        scope = project + '-' + environment
         tags = ['--tags', 'Key=factory:managed-by,Value=engineering-factory',
-                'Key=factory:project-id,Value=' + project, 'Key=factory:environment,Value=' + environment]
+                'Key=factory:project-id,Value=' + project, 'Key=factory:environment,Value=' + environment,
+                'Key=factory:scope,Value=' + scope]
     operation = Operation(args.record, args.output, 'AWS', json.dumps(command).encode())
     try:
         with tempfile.TemporaryDirectory(prefix='factory-aws-') as temporary:
@@ -77,7 +82,7 @@ def execute(args):
                   expiry=creds['Expiration'], project=project or None, environment=environment or None)
             if args.exec:
                 env['PATH'] = os.pathsep.join(dict.fromkeys([str(Path(tools[name]).parent) for name in ('node', 'python', 'git', 'aws')] + ['/usr/bin', '/bin']))
-                env.update(FACTORY_PROJECT_ID=project, FACTORY_ENVIRONMENT=environment,
+                env.update(FACTORY_PROJECT_ID=project, FACTORY_ENVIRONMENT=environment, FACTORY_AWS_SCOPE=scope,
                            FACTORY_AWS_ACCOUNT_ID=account, FACTORY_AWS_REGION=region, FACTORY_AWS_ROLE_NAME=role)
                 for key in ('FACTORY_AWS_APP_BOUNDARY_ARN', 'FACTORY_AWS_APP_POLICY_ARN'):
                     value = os.environ.get(key, '')
