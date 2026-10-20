@@ -238,7 +238,7 @@ def render(config, baseline, boundary, bootstrap, trust):
     assume = next(s for s in new_bootstrap['Statement'] if s.get('Sid') == 'AssumeFactoryRunnerOnly')
     if assume['Resource'] != role_arn:
         raise ValueError('Unexpected bootstrap runner target')
-    merge_conditions(tag_condition, assume['Condition'])
+    merge_conditions(tag_condition, tag_session_conditions(assume['Condition']))
     new_bootstrap['Statement'].append(statement('sts:TagSession', role_arn, tag_condition))
     # Prevent wildcard/path substitution into project-namespaced Resource ARNs.
     for key in ('project-id', 'environment'):
@@ -261,6 +261,7 @@ def render(config, baseline, boundary, bootstrap, trust):
     tagged_trust = copy.deepcopy(base)
     tagged_trust['Sid'] = 'TrustBootstrapProjectTags'
     tagged_trust['Action'] = 'sts:TagSession'
+    tagged_trust['Condition'] = tag_session_conditions(tagged_trust['Condition'])
     session_condition = creation_session_condition()
     # Exact bootstrap identity enforces the UUID-shaped value and excludes ARN metacharacters.
     # Trust policies reject wildcard-only project values in an Allow, so retain required keys here.
@@ -295,6 +296,16 @@ def render(config, baseline, boundary, bootstrap, trust):
         if len(compact(policy)) > maximum:
             raise ValueError('Rendered policy exceeds its quota; never drop protections to fit: ' + name)
     return result
+
+def tag_session_conditions(conditions):
+    """RoleSessionName applies to AssumeRole, not its separate TagSession authorization."""
+    result = copy.deepcopy(conditions)
+    for operator in list(result):
+        result[operator].pop('sts:RoleSessionName', None)
+        if not result[operator]:
+            del result[operator]
+    return result
+
 
 def merge_conditions(target, source):
     for operator, values in source.items():

@@ -55,6 +55,7 @@ This public repository supports conversational engineering from a phone or deskt
 
 ## Failure and completion
 
+- A returned running tool cell/process session is pending work. Preserve its handle and timing, then use the documented resume/wait mechanism until completion or required user input; do not finalize or start a duplicate operation because the first yield has no output.
 - Stop the affected action on ambiguous targets, unexpected visibility/origin, permission failures or unknown mutation outcomes. Surface the blocker, ask for the specific missing decision when needed and continue unaffected authorized work. Inspect current state and retry idempotently; do not delete/recreate resources as recovery without approval.
 - Before access checks, set a short diagnostic budget and supported command/connect timeouts. Surface the first failure promptly; include its safe observed error, affected milestone and concrete remedy or next discriminating check. Retry only with new evidence or a changed prerequisite, recording what changed. A pending platform approval is not missing product authorization; identify its source and the exact action awaiting it.
 - Preserve existing checkouts and dirty files. Never force-push, reset user work, disable protection, or auto-link an unknown Vercel project to recover.

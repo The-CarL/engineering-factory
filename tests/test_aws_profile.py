@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 SPEC = importlib.util.spec_from_file_location('aws_profile', Path(__file__).resolve().parents[1] / 'infra/aws/render.py')
 profile = importlib.util.module_from_spec(SPEC)
@@ -139,6 +140,47 @@ class AWSProfileTests(unittest.TestCase):
         create = self.result['app-execution-policy.json']['Statement'][-1]
         self.assertEqual(create['Condition']['StringEquals']['aws:RequestTag/factory:s'], profile.SCOPE)
         self.assertEqual(len(create['Condition']['StringLike']) - 1, 13)
+
+    def test_tag_session_does_not_require_assume_role_only_context(self):
+        bootstrap_assume = next(s for s in self.result['bootstrap-policy.json']['Statement']
+            if s.get('Action') == 'sts:AssumeRole' and s['Effect'] == 'Allow')
+        original_assume = copy.deepcopy(self.bootstrap['Statement'][0])
+        original_assume.pop('Sid')
+        self.assertEqual(bootstrap_assume, original_assume)
+        self.assertEqual(self.result['runner-trust.json']['Statement'][0], self.trust['Statement'][0])
+        for name in ('bootstrap-policy.json', 'runner-trust.json'):
+            tag = next(s for s in self.result[name]['Statement'] if s.get('Action') == 'sts:TagSession' and s['Effect'] == 'Allow')
+            keys = {key for values in tag['Condition'].values() for key in values}
+            self.assertNotIn('sts:RoleSessionName', keys)
+            self.assertTrue(all(tag['Condition'].values()))
+            self.assertEqual(tag['Condition']['DateLessThan'], original_assume['Condition']['DateLessThan'])
+            self.assertEqual(tag['Condition']['Bool'], original_assume['Condition']['Bool'])
+            self.assertEqual(tag['Condition']['StringEquals']['aws:RequestTag/factory:s'],
+                '${aws:RequestTag/factory:project-id}-${aws:RequestTag/factory:environment}')
+        bootstrap_tags = next(s for s in self.result['bootstrap-policy.json']['Statement'] if s.get('Action') == 'sts:TagSession' and s['Effect'] == 'Allow')
+        self.assertEqual(bootstrap_tags['Resource'], self.arn)
+        self.assertEqual(self.result['runner-trust.json']['Statement'][1]['Principal'], self.trust['Statement'][0]['Principal'])
+        self.assertEqual(self.result['runner-trust.json']['Statement'][1]['Condition']['ArnEquals'],
+            self.trust['Statement'][0]['Condition']['ArnEquals'])
+
+    def test_tag_session_correction_changes_only_bootstrap_and_trust_documents(self):
+        # Reproduce the previous copier while keeping the same private-input interface.
+        with mock.patch.object(profile, 'tag_session_conditions', side_effect=copy.deepcopy):
+            previous = profile.render(*self.args)
+        changed = {name for name in previous if profile.compact(previous[name]) != profile.compact(self.result[name])}
+        self.assertEqual(changed, {'bootstrap-policy.json', 'runner-trust.json'})
+        for name in changed:
+            before = previous[name]
+            after = self.result[name]
+            for old, new in zip(before['Statement'], after['Statement']):
+                if old.get('Action') != 'sts:TagSession' or old['Effect'] != 'Allow':
+                    self.assertEqual(old, new)
+                    continue
+                expected = copy.deepcopy(old)
+                expected['Condition']['StringLike'].pop('sts:RoleSessionName')
+                if not expected['Condition']['StringLike']:
+                    expected['Condition'].pop('StringLike')
+                self.assertEqual(expected, new)
 
     def test_engine_guards_cover_stored_roles_and_cluster_target_not_unsupported_rolearn(self):
         statements = self.result['app-execution-boundary.json']['Statement']
