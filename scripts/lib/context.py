@@ -12,7 +12,7 @@ import uuid
 from urllib.parse import urlsplit
 
 from provider import gh_environment, METADATA
-from runtime import ROOT, base_env, digest, known_credentials, load, private_path, read_private, require, run
+from runtime import ROOT, base_env, digest, known_credentials, load, private_path, read_private, require, run, valid_environment
 
 REPO = r'[a-z0-9][a-z0-9-]{0,38}/[a-z0-9][a-z0-9_.-]{0,99}'
 BRANCH = r'[A-Za-z0-9][A-Za-z0-9_./-]{0,199}'
@@ -52,6 +52,8 @@ def metadata(data):
         require(isinstance(value, str) and 0 < len(value) <= 256 and '\n' not in value, 'Invalid ownership metadata value')
         if key in ('factoryProjectId',):
             project_id(value)
+        elif key == 'factoryEnvironment':
+            require(valid_environment(value), 'Invalid ownership environment namespace')
         elif key in ('factorySourceCommit', 'factoryLastSourceCommit'):
             require(re.fullmatch(r'[a-f0-9]{40}', value), 'Invalid metadata commit')
         elif key in ('factoryCreatedAt', 'factoryExpiresAt'):
@@ -100,6 +102,8 @@ def journal(data, expected):
                     require(value['factoryProjectId'] == expected, 'Journal belongs to another project')
             elif key in ('request_sha256', 'response_sha256', 'source'):
                 require(isinstance(value, str) and re.fullmatch(r'[a-f0-9]{40}' if key == 'source' else r'[a-f0-9]{64}', value), 'Invalid journal hash')
+            elif key == 'environment' and value is not None:
+                require(valid_environment(value), 'Invalid journal environment namespace')
             elif key == 'size':
                 require(type(value) is int and 0 <= value <= 16 * 1024 * 1024, 'Invalid response byte count')
             elif key == 'detail':
@@ -133,7 +137,7 @@ def inventory(data, expected):
     value = json.loads(data)
     require(isinstance(value, dict) and set(value) == {'schema', 'project_id', 'environment', 'resources'}
             and value['schema'] == 1 and value['project_id'] == expected
-            and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', value['environment'])
+            and valid_environment(value['environment'])
             and isinstance(value['resources'], list) and 1 <= len(value['resources']) <= 128, 'Invalid inventory schema/project')
     identities = []
     for item in value['resources']:
@@ -171,7 +175,7 @@ def record(value):
     require(isinstance(value, dict) and set(value) == {'schema', 'project_id', 'repository', 'environment', 'branch',
             'source_commit', 'factory_source_commit', 'config', 'artifacts'} and value['schema'] == 1, 'Invalid project context schema')
     project_id(value['project_id'])
-    require(re.fullmatch(REPO, value['repository']) and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', value['environment'])
+    require(re.fullmatch(REPO, value['repository']) and valid_environment(value['environment'])
             and re.fullmatch(BRANCH, value['branch']) and '..' not in value['branch']
             and (value['source_commit'] is None or re.fullmatch(r'[a-f0-9]{40}', value['source_commit']))
             and re.fullmatch(r'[a-f0-9]{40}', value['factory_source_commit']), 'Invalid project source/environment')

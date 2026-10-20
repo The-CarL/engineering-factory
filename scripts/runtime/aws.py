@@ -10,7 +10,7 @@ import sys
 import tempfile
 import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
-from runtime import Operation, Parser, base_env, cli, digest, event, known_credentials, load, require, run
+from runtime import Operation, Parser, base_env, cli, digest, event, known_credentials, load, project_scope, require, run
 
 
 def execute(args):
@@ -48,9 +48,7 @@ def execute(args):
     scope = ''
     project, environment = os.environ.get('FACTORY_PROJECT_ID', ''), os.environ.get('FACTORY_ENVIRONMENT', '')
     if project or environment:
-        require(str(uuid.UUID(project)) == project and uuid.UUID(project).int != 0
-                and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', environment), 'Set both validated project/environment session context values')
-        scope = project + '-' + environment
+        scope = project_scope(project, environment)
         tags = ['--tags', 'Key=factory:managed-by,Value=engineering-factory',
                 'Key=factory:project-id,Value=' + project, 'Key=factory:environment,Value=' + environment,
                 'Key=factory:scope,Value=' + scope]

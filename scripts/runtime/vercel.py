@@ -9,7 +9,7 @@ import sys
 import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 from provider import METADATA, Vercel
-from runtime import Operation, Parser, cli, digest, event, known_credentials, load, private_path, read_private, require
+from runtime import Operation, Parser, cli, digest, event, known_credentials, load, private_path, read_private, require, valid_environment
 
 
 def provenance(path):
@@ -22,7 +22,7 @@ def provenance(path):
             'Factory project UUID differs from private context')
     require(meta['factoryManagedBy'] == 'engineering-factory' and meta['factoryProvenanceVersion'] == '1'
             and meta['factoryEnvironment'] == os.environ.get('FACTORY_ENVIRONMENT')
-            and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', meta['factoryEnvironment']), 'Invalid project/environment provenance')
+            and valid_environment(meta['factoryEnvironment']), 'Invalid project/environment provenance')
     for key in ('factorySourceCommit', 'factoryLastSourceCommit'):
         require(re.fullmatch(r'[a-f0-9]{40}', meta[key]), 'Exact source commits are required')
     for key in ('factoryOwner', 'factoryCreatedBy', 'factoryCreationRunId', 'factoryLastRunId'):

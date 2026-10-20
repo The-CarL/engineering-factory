@@ -10,6 +10,7 @@ import shlex
 import tempfile
 import subprocess
 import sys
+import uuid
 
 from provider import ProviderError, transport_reason
 
@@ -26,6 +27,18 @@ class Parser(argparse.ArgumentParser):
 def require(condition, message):
     if not condition:
         raise ProviderError(message)
+
+
+def valid_environment(value):
+    return (isinstance(value, str) and re.fullmatch(r'[a-z](?:[a-z0-9-]{0,30}[a-z0-9])?', value) is not None
+            and '--' not in value and 'r' not in value.split('-'))
+
+
+def project_scope(project, environment):
+    require(isinstance(project, str) and re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}', project)
+            and uuid.UUID(project).int != 0 and valid_environment(environment),
+            'Use a canonical nonzero project UUID and environment without reserved r components or invalid hyphens')
+    return project + '-' + environment
 
 
 def known_credentials():

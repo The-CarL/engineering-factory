@@ -275,6 +275,31 @@ class ContextTests(unittest.TestCase):
                 context.inventory(json.dumps(invalid).encode(), initial['project_id'])
         self.assertEqual(len(self.published), 2)
 
+
+    def test_context_inventory_and_ownership_share_reserved_environment_validation(self):
+        initial = self.initialize()
+        now = datetime.now(timezone.utc).isoformat()
+        meta = dict(factoryProjectId=initial['project_id'], factoryEnvironment='development', factoryOwner='fixture-owner',
+                    factoryManagedBy='engineering-factory', factorySourceRepo=self.target, factorySourceCommit='d' * 40,
+                    factoryCreatedBy='fixture', factoryCreatedAt=now, factoryCreationRunId='fixture-run',
+                    factoryLastRunId='fixture-run', factoryLastSourceCommit='d' * 40,
+                    factoryProvenanceVersion='1', factoryExpiresAt='none')
+        context.metadata(meta)
+        inventory = dict(schema=1, project_id=initial['project_id'], environment='development', resources=[dict(
+            provider='AWS', resource_id='fixture-owned-resource', resource_type='s3:bucket', parent_id=None, backend_ref=None,
+            run_id='fixture-run', source_commit='d' * 40, status='ready', ownership='managed')])
+        for environment in ('r', 'r-blue', 'prod-r', 'prod-r-blue', 'prod--blue', 'prod-'):
+            changed = dict(initial, environment=environment)
+            with self.assertRaises(ProviderError):
+                context.record(changed)
+            inventory['environment'] = environment
+            with self.assertRaises(ProviderError):
+                context.inventory(json.dumps(inventory).encode(), initial['project_id'])
+            meta['factoryEnvironment'] = environment
+            with self.assertRaises(ProviderError):
+                context.metadata(meta)
+        self.assertEqual(len(self.published), 1)
+
     def test_context_owner_requires_own_identity_or_active_org_membership(self):
         self.principal, self.membership = 'fixture-agent', 'pending'
         with self.assertRaises(ProviderError):
