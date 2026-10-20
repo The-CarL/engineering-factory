@@ -150,13 +150,16 @@ def git_command(tools, env, args, target):
 def execute(args):
     tools = load()
     target = args.repo.lower()
-    contextual = os.environ.get('FACTORY_PROJECT_REPOSITORY', '') == target
+    command = args.command[1:] if args.command[:1] == ['--'] else args.command
+    creation = args.mode == 'gh' and (command[:2] == ['repo', 'create'] or command[:2] in
+                (['api', 'user/repos'], ['api', 'orgs/' + target.split('/')[0] + '/repos']))
+    selected_app = Path(os.environ.get('FACTORY_PROJECT_APP', str(ROOT / 'workspaces' / target)))
+    contextual = os.environ.get('FACTORY_PROJECT_REPOSITORY', '') == target and not creation and (selected_app / '.factory/project.json').is_file()
     if contextual:
         from context import preflight
         preflight(tools)
     require(re.fullmatch(r'[a-z0-9][a-z0-9-]{0,38}/[a-z0-9][a-z0-9_.-]{0,99}', target)
             and target.split('/')[0] == os.environ.get('FACTORY_GITHUB_OWNER', '').lower(), 'GitHub target differs from approved owner/repository')
-    command = args.command[1:] if args.command[:1] == ['--'] else args.command
     tokens = known_credentials()
     require(not any(token and token in value for token in tokens for value in command), 'Credential argument rejected')
     # Validate explicit source before any subprocess, including identity calls.
@@ -172,6 +175,9 @@ def execute(args):
         else:
             repository(tools, env, target, args.visibility)
             executable, payload = git_command(tools, env, args, target)
+            if args.action == 'push':
+                from context import publication
+                publication(tools, target, Path(args.app))
         require(not any(token and token.encode() in (payload or b'') for token in tokens), 'Factory credential in request body rejected')
         operation = Operation(args.record, args.output, 'GitHub', json.dumps(executable).encode() + (payload or b''), contextual=contextual)
         try:

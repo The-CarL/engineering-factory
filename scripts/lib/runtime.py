@@ -173,6 +173,8 @@ class Operation:
 
 
 def load():
+    from context import reject_legacy
+    reject_legacy()
     _, revision, files = check_source()
     directory = os.environ.get('FACTORY_RUNTIME_DIRECTORY', '')
     path = Path(os.environ.get('FACTORY_RUNTIME_MANIFEST') or (str(Path(directory) / 'manifest.json') if directory else ''))
@@ -207,6 +209,8 @@ def load():
 
 
 def write_environment(value, tools, project=None):
+    from context import reject_legacy
+    reject_legacy()
     path = Path(value)
     private_path(path, existing=path.exists())
     marker = '# Generated engineering-factory activation; no credentials.\n'
@@ -220,7 +224,7 @@ def write_environment(value, tools, project=None):
                   FACTORY_SOURCE_REVISION=os.environ['FACTORY_SOURCE_REVISION'],
                   FACTORY_PRIVATE_ROOT=os.environ['FACTORY_PRIVATE_ROOT'],
                   FACTORY_GITHUB_CREDENTIAL_SOURCE=source, PATH=os.pathsep.join(dict.fromkeys(directories)))
-    for name in ('FACTORY_CONTEXT_REPOSITORY', 'FACTORY_CONTEXT_DIRECTORY', 'FACTORY_PROJECT_REPOSITORY'):
+    for name in ('FACTORY_PROJECT_REPOSITORY', 'FACTORY_PROJECT_APP'):
         if os.environ.get(name):
             values[name] = os.environ[name]
     values.update(project or {})

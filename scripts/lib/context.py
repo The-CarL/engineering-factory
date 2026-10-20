@@ -1,4 +1,4 @@
-"""Strict private Git context records. Storage content is data, never executable input."""
+"""Project-owned bounded registry. Data never authorizes resource adoption or executes code."""
 from contextlib import contextmanager
 from datetime import datetime
 import json
@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import shlex
 import subprocess
+import sys
 import tempfile
 import uuid
 from urllib.parse import urlsplit
@@ -173,8 +174,9 @@ def artifact(data, expected, kind):
 
 def record(value):
     require(isinstance(value, dict) and set(value) == {'schema', 'project_id', 'repository', 'environment', 'branch',
-            'source_commit', 'factory_source_commit', 'config', 'artifacts'} and value['schema'] == 1, 'Invalid project context schema')
+            'source_commit', 'factory_source_commit', 'factory_source_repository', 'publication', 'config', 'artifacts'} and value['schema'] == 2, 'Invalid project context schema')
     project_id(value['project_id'])
+    require(re.fullmatch(REPO, value['factory_source_repository']) and value['publication'] in ('private', 'public-minimal'), 'Invalid registry standard reference/publication policy')
     require(re.fullmatch(REPO, value['repository']) and valid_environment(value['environment'])
             and re.fullmatch(BRANCH, value['branch']) and '..' not in value['branch']
             and (value['source_commit'] is None or re.fullmatch(r'[a-f0-9]{40}', value['source_commit']))
@@ -188,6 +190,8 @@ def record(value):
         relative(name)
         require(isinstance(item, dict) and set(item) == {'sha256', 'kind'} and item['kind'] in ('journal', 'ownership', 'inventory')
                 and re.fullmatch(r'[a-f0-9]{64}', item['sha256']), 'Invalid artifact manifest')
+    if value['publication'] == 'public-minimal':
+        require(set(value['config']) <= {'FACTORY_GITHUB_OWNER'} and not value['artifacts'], 'Confidential registry data cannot be published to a public app')
     encoded = json.dumps(value, sort_keys=True).encode()
     require(len(encoded) <= 128 * 1024, 'Project metadata size exceeded')
     clean(encoded)
@@ -208,187 +212,21 @@ def app_identity(tools, app, target):
     allowed = ('https://github.com/' + target, 'https://github.com/' + target + '.git', 'git@github.com:' + target + '.git')
     require(git('remote', 'get-url', '--all', 'origin').lower() in allowed
             and git('remote', 'get-url', '--push', '--all', 'origin').lower() in allowed, 'App origin differs from selected context')
+    keys = git('config', '--local', '--name-only', '--list').lower().splitlines()
+    require(not any('extraheader' in key or key.startswith('url.') for key in keys), 'Review app Git URL/auth overrides privately')
     branch = git('symbolic-ref', '--short', 'HEAD')
     require(re.fullmatch(BRANCH, branch) and '..' not in branch, 'App requires a normal selected branch')
     return branch, git('rev-parse', '--verify', 'HEAD', optional=True)
 
 
-class Store:
-    def __init__(self, tools):
-        self.tools = tools
-        self.repository = os.environ.get('FACTORY_CONTEXT_REPOSITORY', '').lower()
-        require(re.fullmatch(REPO, self.repository) and self.repository.split('/')[0] == os.environ.get('FACTORY_GITHUB_OWNER', '').lower()
-                and self.repository != os.environ.get('FACTORY_SOURCE_REPOSITORY', '').lower(), 'Select an independent exact private context repository')
-        require(os.environ.get('FACTORY_GITHUB_CREDENTIAL_SOURCE') == 'factory-token', 'Context storage requires explicit factory-token credential selection')
-        selected = gh_environment()
-        self.directory = Path(os.environ.get('FACTORY_CONTEXT_DIRECTORY', ''))
-        require(self.directory.is_absolute() and '..' not in self.directory.parts
-                and not any(p.is_symlink() for p in (self.directory, *self.directory.parents)), 'Select a canonical private context directory')
-        if not self.directory.exists():
-            private_path(self.directory)
-            self.directory.mkdir(mode=0o700)
-        private_path(self.directory / 'probe')
-        self.env = base_env('/tmp')
-        self.env.update(GH_TOKEN=selected['GH_TOKEN'], GH_HOST='github.com', GH_PROMPT_DISABLED='1', GH_CONFIG_DIR=str(self.directory))
-        self.prefix = [tools['git'], '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'credential.helper=',
-                       '-c', 'credential.https://github.com.helper=!' + shlex.quote(tools['gh']) + ' auth git-credential',
-                       '-c', 'user.name=Factory context', '-c', 'user.email=factory-context@example.invalid', '-C', str(self.directory)]
-
-    def git(self, *args, optional=False):
-        result = subprocess.run([*self.prefix, *args], env=self.env, capture_output=True, timeout=120)
-        require(optional or result.returncode == 0, 'Context Git sync failed; preserve local state and reconcile before retrying')
-        return result.stdout if result.returncode == 0 else None
-
-    def api(self, target):
-        response = json.loads(run([self.tools['gh'], 'api', '--hostname', 'github.com', 'repos/' + target], self.env, 'GitHub context'))
-        require(response.get('full_name', '').lower() == target and isinstance(response.get('private'), bool), 'Context repository target cannot be verified')
-        return response
-
-    @contextmanager
-    def locked(self):
-        lock = self.directory.parent / ('.' + self.directory.name + '.lock')
-        descriptor = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
-        try:
-            os.close(descriptor)
-            yield self
-        finally:
-            lock.unlink()
-
-    def remote(self, *args):
-        info = self.api(self.repository)
-        require(info['private'] is True and info.get('archived') is False, 'Context repository must remain private and writable')
-        return self.git(*args)
-
-    def sync(self, reconcile=False):
-        principal = json.loads(run([self.tools['gh'], 'api', '--hostname', 'github.com', 'user'], self.env, 'GitHub context'))
-        require(isinstance(principal.get('login'), str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]{0,38}', principal['login']), 'Context principal cannot be verified')
-        owner = self.repository.split('/')[0]
-        if principal['login'].lower() != owner:
-            member = json.loads(run([self.tools['gh'], 'api', '--hostname', 'github.com',
-                'user/memberships/orgs/' + owner], self.env, 'GitHub context'))
-            require(member.get('state') == 'active' and member.get('organization', {}).get('login', '').lower() == owner,
-                    'Context approved owner membership cannot be verified')
-        repository = self.api(self.repository)
-        require(repository['private'] is True and repository.get('archived') is False, 'Context repository must remain private and writable')
-        self.branch = repository['default_branch']
-        require(re.fullmatch(BRANCH, self.branch) and '..' not in self.branch, 'Invalid context branch')
-        if not (self.directory / '.git').exists():
-            require(not list(self.directory.iterdir()), 'Context directory is not empty; no files changed')
-            self.git('init', '--quiet')
-            self.git('remote', 'add', 'origin', 'https://github.com/' + self.repository + '.git')
-        require((self.directory / '.git').is_dir() and not (self.directory / '.git').is_symlink()
-                and not (self.directory / '.git/objects/info/alternates').exists(), 'Context must be an independent Git clone')
-        require(self.git('rev-parse', '--show-toplevel').decode().strip() == str(self.directory)
-                and self.git('remote', 'get-url', '--all', 'origin').decode().strip() == 'https://github.com/' + self.repository + '.git'
-                and self.git('remote', 'get-url', '--push', '--all', 'origin').decode().strip() == 'https://github.com/' + self.repository + '.git', 'Context Git origin differs from approved repository')
-        keys = self.git('config', '--local', '--name-only', '--list').decode().lower().splitlines()
-        allowed = {'core.repositoryformatversion', 'core.filemode', 'core.bare', 'core.logallrefupdates',
-                   'core.ignorecase', 'core.precomposeunicode', 'remote.origin.url', 'remote.origin.fetch'}
-        require(set(keys) <= allowed, 'Unexpected context Git configuration')
-        require(not self.git('status', '--porcelain', '--untracked-files=all').strip(), 'Context has pending local changes; reconcile without resetting')
-        heads = self.remote('ls-remote', '--heads', 'origin', 'refs/heads/' + self.branch)
-        if not heads.strip():
-            current = self.git('rev-parse', '--verify', 'HEAD', optional=True)
-            require(repository.get('size') == 0 and (current is None or reconcile), 'Context branch missing or local publication pending; reconcile')
-            if current:
-                self.validate_local()
-                self.publish_pending()
-            return
-        self.remote('fetch', '--no-tags', 'origin', 'refs/heads/' + self.branch)
-        self.validate_tree('FETCH_HEAD')
-        current = self.git('rev-parse', '--verify', 'HEAD', optional=True)
-        if current:
-            if self.git('merge-base', '--is-ancestor', 'HEAD', 'FETCH_HEAD', optional=True) is None:
-                require(reconcile and self.git('merge-base', '--is-ancestor', 'FETCH_HEAD', 'HEAD', optional=True) is not None,
-                        'Context has unpublished/divergent commits; preserve and reconcile without force push')
-                self.validate_local()
-                self.publish_pending()
-            else:
-                self.git('merge', '--ff-only', 'FETCH_HEAD')
-        else:
-            self.git('checkout', '--detach', 'FETCH_HEAD')
-
-    def validate_local(self):
-        self.validate_tree('HEAD')
-        for path in (self.directory / 'projects').glob('*/project.json'):
-            data = record(json.loads(path.read_bytes()))
-            require(path.parent.name == data['project_id'], 'Context namespace differs from UUID')
-            self.artifacts(data)
-
-    def publish_pending(self):
-        head = self.git('rev-parse', 'HEAD').decode().strip()
-        self.remote('push', 'origin', 'HEAD:refs/heads/' + self.branch)
-        observed = self.remote('ls-remote', '--heads', 'origin', 'refs/heads/' + self.branch).decode().split()
-        require(len(observed) == 2 and observed[0] == head, 'Context publication readback differs; preserve and reconcile')
-
-    def validate_tree(self, revision):
-        entries = self.git('ls-tree', '-r', '-z', revision).split(b'\0')
-        require(len(entries) <= 1025, 'Context tree has too many files')
-        total = 0
-        for entry in filter(None, entries):
-            header, name = entry.decode().split('\t', 1)
-            mode, kind, object_id = header.split()
-            require(mode == '100644' and kind == 'blob', 'Context symlinks/submodules/executables are forbidden')
-            parts = Path(name).parts
-            if name != 'README.md':
-                require(len(parts) >= 3 and parts[0] == 'projects', 'Unexpected context tree path')
-                project_id(parts[1])
-                require(parts[2:] == ('project.json',) or len(parts) >= 4 and parts[2] == 'artifacts', 'Unexpected context project path')
-                if parts[2] == 'artifacts':
-                    relative('/'.join(parts[3:]))
-            size = int(self.git('cat-file', '-s', object_id))
-            total += size
-            require(size <= LIMIT and total <= 16 * LIMIT, 'Context tree byte bounds exceeded')
-
-    def find(self, target):
-        require(re.fullmatch(REPO, target) and target != self.repository, 'Select an independent exact app repository')
-        matches = []
-        for path in sorted((self.directory / 'projects').glob('*/project.json')):
-            require(path.is_file() and not path.is_symlink() and path.stat().st_size <= 128 * 1024, 'Unsafe project context file')
-            data = record(json.loads(path.read_bytes()))
-            require(path.parent.name == data['project_id'], 'Context namespace differs from UUID')
-            if data['repository'] == target:
-                matches.append(data)
-        require(len(matches) <= 1, 'Duplicate context repositories require reconciliation')
-        return matches[0] if matches else None
-
-    def artifacts(self, data):
-        result = {}
-        base = self.directory / 'projects' / data['project_id'] / 'artifacts'
-        total = 0
-        for name, item in data['artifacts'].items():
-            path = base / relative(name)
-            require(path.is_file() and not any(p.is_symlink() for p in (path, *path.parents)), 'Unsafe context artifact')
-            content = path.read_bytes()
-            total += len(content)
-            require(total <= LIMIT and digest(content) == item['sha256'], 'Context artifact integrity/size failed')
-            parsed = artifact(content, data['project_id'], item['kind'])
-            if item['kind'] == 'inventory':
-                require(parsed['environment'] == data['environment'], 'Inventory environment differs from selected context')
-            result[name] = content
-        for name, item in data['artifacts'].items():
-            if item['kind'] == 'ownership':
-                owner = receipt(result[name], data['project_id'])
-                evidence = result.get(owner['creation_record'])
-                require(evidence is not None and digest(evidence) == owner['creation_record_sha256'], 'Ownership creation journal missing or changed')
-                events = journal(evidence, data['project_id'])
-                require(events[-1]['state'] == 'complete' and any(event.get('state') == 'created-resource'
-                        and event.get('team') == owner['team_id'] and event.get('project') == owner['project_id']
-                        and event.get('name') == owner['project_name'] and event.get('metadata') == owner['metadata'] for event in events),
-                        'Ownership receipt lacks completed exact creation evidence')
-        return result
-
-    def publish(self):
-        self.git('add', '--', 'projects')
-        if not self.git('diff', '--cached', '--quiet', optional=True) == b'':
-            self.git('commit', '--quiet', '-m', 'chore: checkpoint verified project context')
-        # Recheck private visibility immediately before publication. Normal push is the concurrency gate.
-        self.validate_local()
-        self.remote('push', 'origin', 'HEAD:refs/heads/' + self.branch)
+def reject_legacy():
+    require(not any(os.environ.get(key) for key in ('FACTORY_CONTEXT_REPOSITORY', 'FACTORY_CONTEXT_DIRECTORY')),
+            'Central context storage is no longer supported; remove stale FACTORY_CONTEXT_REPOSITORY/DIRECTORY and select the app repository')
 
 
 def configured():
-    return bool(os.environ.get('FACTORY_CONTEXT_REPOSITORY'))
+    reject_legacy()
+    return bool(os.environ.get('FACTORY_PROJECT_REPOSITORY'))
 
 
 def values(data, app):
@@ -399,146 +237,336 @@ def values(data, app):
             require(re.fullmatch(CONFIG[key], os.environ[key]), 'Invalid explicit AWS region override')
             result[key] = os.environ[key]
             continue
-        require(not os.environ.get(key) or os.environ[key] == expected, 'Selected project/provider context differs; use a clean explicit project selection')
+        require(not os.environ.get(key) or os.environ[key] == expected, 'Selected project/provider registry differs; use an explicit clean project selection')
     return result
+
+
+def atomic(path, content, mode):
+    require(not any(p.is_symlink() for p in (path, *path.parents)), 'Registry path contains a symlink')
+    require(not path.exists() or path.is_file(), 'Registry target must be a regular file')
+    descriptor, temporary = tempfile.mkstemp(prefix='.factory-', dir=path.parent)
+    try:
+        with os.fdopen(descriptor, 'wb') as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+@contextmanager
+def locked(app):
+    path = app / '.git/factory-registry.lock'
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        os.close(descriptor)
+        yield
+    finally:
+        path.unlink()
+
+
+class Project:
+    def __init__(self, tools, target, app):
+        reject_legacy()
+        require(re.fullmatch(REPO, target) and target != os.environ.get('FACTORY_SOURCE_REPOSITORY', '').lower()
+                and target.split('/')[0] == os.environ.get('FACTORY_GITHUB_OWNER', '').lower(), 'Select an independent app under the approved owner')
+        require(os.environ.get('FACTORY_GITHUB_CREDENTIAL_SOURCE') in ('factory-token', 'cli'), 'Select the explicit GitHub credential source')
+        self.tools, self.target, self.app = tools, target, app
+
+    def __enter__(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix='factory-registry-')
+        self.env = base_env(self.temporary.name)
+        selected = gh_environment()
+        for key in ('GH_TOKEN', 'GITHUB_TOKEN'):
+            if selected.get(key):
+                self.env[key] = selected[key]
+        if os.environ['FACTORY_GITHUB_CREDENTIAL_SOURCE'] == 'cli':
+            for key in ('HOME', 'GH_CONFIG_DIR', 'XDG_CONFIG_HOME'):
+                if selected.get(key):
+                    self.env[key] = selected[key]
+        else:
+            self.env['GH_CONFIG_DIR'] = self.temporary.name
+        self.env.update(GH_HOST='github.com', GH_PROMPT_DISABLED='1', GH_NO_UPDATE_NOTIFIER='1')
+        self.prefix = [self.tools['git'], '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
+                       '-c', 'credential.helper=', '-c', 'credential.https://github.com.helper=',
+                       '-c', 'credential.https://github.com.helper=!' + shlex.quote(self.tools['gh']) + ' auth git-credential']
+        return self
+
+    def __exit__(self, *args):
+        self.temporary.cleanup()
+
+    def git(self, *args, optional=False):
+        result = subprocess.run([*self.prefix, '-C', str(self.app), *args], env=self.env, capture_output=True, timeout=120)
+        require(optional or result.returncode == 0, 'App registry Git operation failed; preserve state and reconcile without replay')
+        return result.stdout if result.returncode == 0 else None
+
+    def verify(self):
+        principal = json.loads(run([self.tools['gh'], 'api', '--hostname', 'github.com', 'user'], self.env, 'GitHub registry'))
+        require(isinstance(principal.get('login'), str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]{0,38}', principal['login']), 'GitHub principal cannot be verified')
+        owner = self.target.split('/')[0]
+        if principal['login'].lower() != owner:
+            member = json.loads(run([self.tools['gh'], 'api', '--hostname', 'github.com', 'user/memberships/orgs/' + owner], self.env, 'GitHub registry'))
+            require(member.get('state') == 'active' and member.get('organization', {}).get('login', '').lower() == owner,
+                    'GitHub approved owner membership cannot be verified')
+        info = json.loads(run([self.tools['gh'], 'api', '--hostname', 'github.com', 'repos/' + self.target], self.env, 'GitHub registry'))
+        require(info.get('full_name', '').lower() == self.target and type(info.get('private')) is bool
+                and not info.get('archived', False), 'App repository identity/visibility cannot be verified')
+        self.private = info['private']
+        return info
+
+    def read(self, revision=None):
+        contents = {}
+        if revision:
+            entries = self.git('ls-tree', '-r', '-z', revision, '--', '.factory').split(b'\0')
+            require(len(entries) <= 258, 'Registry file count exceeded')
+            for entry in filter(None, entries):
+                header, name = entry.decode().split('\t', 1)
+                mode, kind, object_id = header.split()
+                require(mode == '100644' and kind == 'blob', 'Registry symlinks/submodules/executables are forbidden')
+                require(int(self.git('cat-file', '-s', object_id)) <= LIMIT, 'Registry file size exceeded')
+                contents[name] = self.git('cat-file', 'blob', object_id)
+        else:
+            folder = self.app / '.factory'
+            require(not folder.is_symlink(), 'Registry directory cannot be a symlink')
+            if folder.exists():
+                require(folder.is_dir(), 'Registry must be a directory')
+                for count, path in enumerate(folder.rglob('*')):
+                    require(count < 1024, 'Registry directory count exceeded')
+                    require(not path.is_symlink(), 'Registry symlinks are forbidden')
+                    if path.is_file():
+                        require(len(contents) < 257 and path.stat().st_size <= LIMIT and not path.stat().st_mode & 0o111, 'Registry bounds/modes exceeded')
+                        contents[str(path.relative_to(self.app))] = path.read_bytes()
+                    else:
+                        relative(str(path.relative_to(folder)))
+        require(sum(map(len, contents.values())) <= LIMIT + 128 * 1024, 'Registry byte limit exceeded')
+        if not contents:
+            return None, {}
+        require('.factory/project.json' in contents and len(contents['.factory/project.json']) <= 128 * 1024, 'Missing/bounded app registry required')
+        data = record(json.loads(contents.pop('.factory/project.json')))
+        require(data['repository'] == self.target, 'Registry belongs to another app; no adoption')
+        require(data['publication'] == ('private' if self.private else 'public-minimal'), 'Registry visibility changed; confidential publication blocked')
+        require(set(contents) == {'.factory/artifacts/' + name for name in data['artifacts']}, 'Unknown or missing registry files')
+        artifacts = {name: contents['.factory/artifacts/' + name] for name in data['artifacts']}
+        validate_artifacts(data, artifacts)
+        return data, artifacts
+
+
+def validate_artifacts(data, contents):
+    require(sum(map(len, contents.values())) <= LIMIT, 'Project artifact byte limit exceeded')
+    for name, item in data['artifacts'].items():
+        content = contents[name]
+        require(digest(content) == item['sha256'], 'Registry artifact digest mismatch')
+        parsed = artifact(content, data['project_id'], item['kind'])
+        if item['kind'] == 'inventory':
+            require(parsed['environment'] == data['environment'], 'Inventory environment differs from app')
+        if item['kind'] == 'journal':
+            require(all((not event.get('repository') or event['repository'] == data['repository']) and (not event.get('metadata') or event['metadata']['factorySourceRepo'].lower() == data['repository']) for event in parsed), 'Journal belongs to another app')
+        if item['kind'] == 'ownership':
+            require(parsed['metadata']['factorySourceRepo'].lower() == data['repository'], 'Receipt belongs to another app')
+            evidence = contents.get(parsed['creation_record'])
+            require(evidence is not None and digest(evidence) == parsed['creation_record_sha256'], 'Ownership creation journal missing or changed')
+            events = journal(evidence, data['project_id'])
+            require(events[-1]['state'] == 'complete' and any(event.get('state') == 'created-resource'
+                    and event.get('team') == parsed['team_id'] and event.get('project') == parsed['project_id']
+                    and event.get('name') == parsed['project_name'] and event.get('metadata') == parsed['metadata'] for event in events),
+                    'Ownership receipt lacks completed exact creation evidence')
+
+
+def pending_file(data):
+    root = Path(os.environ['FACTORY_PRIVATE_ROOT'])
+    folder = root / 'project-continuity' / data['project_id']
+    require(not any(p.is_symlink() for p in (folder, *folder.parents)), 'Pending registry path contains a symlink')
+    folder.mkdir(parents=True, mode=0o700, exist_ok=True)
+    # mkdir(parents=True) may use default intermediate permissions.
+    (root / 'project-continuity').chmod(0o700)
+    path = folder / 'pending.json'
+    private_path(path, existing=path.exists())
+    return path
+
+
+def pending(data):
+    path = pending_file(data)
+    if not path.exists():
+        return {}
+    require(path.stat().st_size <= 128 * 1024, 'Pending manifest byte limit exceeded')
+    value = json.loads(read_private(path))
+    require(isinstance(value, dict) and set(value) == {'schema', 'repository', 'project_id', 'artifacts'} and value['schema'] == 1
+            and value['repository'] == data['repository'] and value['project_id'] == data['project_id'], 'Pending registry belongs to another app')
+    record(dict(data, artifacts=value['artifacts'], publication='private'))
+    return value['artifacts']
+
+
+def collect(data, additions, contents):
+    root = Path(os.environ['FACTORY_PRIVATE_ROOT'])
+    for source, kind in additions:
+        source = Path(source)
+        name = str(source.relative_to(root))
+        relative(name)
+        content = read_private(source)
+        parsed = artifact(content, data['project_id'], kind)
+        if kind == 'ownership':
+            evidence = root / parsed['creation_record']
+            raw = read_private(evidence)
+            journal(raw, data['project_id'])
+            require(digest(raw) == parsed['creation_record_sha256'], 'Ownership journal digest mismatch')
+            contents[parsed['creation_record']] = raw
+            data['artifacts'][parsed['creation_record']] = dict(kind='journal', sha256=digest(raw))
+        contents[name] = content
+        data['artifacts'][name] = dict(kind=kind, sha256=digest(content))
+    record(dict(data, publication='private'))
+    validate_artifacts(data, contents)
 
 
 def checkpoint(target, app=None, additions=(), initialize=False, environment=None, tools=None):
     tools = tools or load()
-    store = Store(tools)
-    with store.locked():
-        store.sync()
-        data = store.find(target)
-        if data is None:
-            require(initialize and app is not None and environment, 'Unknown project; explicit verified initialization required')
-            require(store.api(target).get('full_name', '').lower() == target, 'App repository cannot be verified')
-            data = dict(schema=1, project_id=project_id(os.environ.get('FACTORY_PROJECT_ID') or str(uuid.uuid4())), repository=target,
-                        environment=environment, branch='main', source_commit=None,
-                        factory_source_commit=os.environ['FACTORY_SOURCE_REVISION'], config={}, artifacts={})
-            require(not (store.directory / 'projects' / data['project_id']).exists(), 'Project UUID already belongs to another context; no namespace reuse')
-        contents = store.artifacts(data)
-        for key, expected in dict(data['config'], FACTORY_PROJECT_ID=data['project_id'], FACTORY_ENVIRONMENT=data['environment']).items():
-            if key == 'FACTORY_AWS_REGION' and os.environ.get(key):
-                require(re.fullmatch(CONFIG[key], os.environ[key]), 'Invalid explicit AWS region override')
-                continue
-            require(not os.environ.get(key) or os.environ[key] == expected, 'Checkpoint selected targets differ from saved project')
-        if app is not None:
-            data['branch'], data['source_commit'] = app_identity(tools, app, target)
-        data['factory_source_commit'] = os.environ['FACTORY_SOURCE_REVISION']
-        data['config'].update({key: os.environ[key] for key in CONFIG if os.environ.get(key)
-                               and (key != 'FACTORY_AWS_REGION' or key not in data['config'])})
-        record(data)
-        for source, kind in additions:
-            source = Path(source)
-            name = str(source.relative_to(Path(os.environ['FACTORY_PRIVATE_ROOT'])))
-            relative(name)
-            content = read_private(source)
-            if kind == 'journal':
-                events = journal(content, data['project_id'])
-                require(all(not event.get('repository') or event['repository'] == target for event in events), 'Journal repository differs from selected app')
-            else:
-                parsed = artifact(content, data['project_id'], kind)
-                if kind == 'inventory':
-                    require(parsed['environment'] == data['environment'], 'Inventory environment differs from selected context')
-            if kind == 'ownership':
-                owner = receipt(content, data['project_id'])
-                require(owner['metadata']['factorySourceRepo'].lower() == target, 'Ownership source differs from selected app')
-                evidence = Path(os.environ['FACTORY_PRIVATE_ROOT']) / owner['creation_record']
-                raw = read_private(evidence)
-                journal(raw, data['project_id'])
-                require(digest(raw) == owner['creation_record_sha256'], 'Ownership journal digest mismatch')
-                contents[owner['creation_record']] = raw
-                data['artifacts'][owner['creation_record']] = dict(kind='journal', sha256=digest(raw))
-            contents[name] = content
-            data['artifacts'][name] = dict(kind=kind, sha256=digest(content))
-        require(sum(map(len, contents.values())) <= LIMIT, 'Context project byte bounds exceeded')
-        record(data)
-        folder = store.directory / 'projects' / data['project_id']
-        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-        for name, content in contents.items():
-            destination = folder / 'artifacts' / relative(name)
-            destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            destination.write_bytes(content)
-            destination.chmod(0o644)
-        (folder / 'project.json').write_text(json.dumps(data, sort_keys=True) + '\n')
-        (folder / 'project.json').chmod(0o644)
-        store.artifacts(data)
-        store.publish()
-        return data
-
-
-def restore(target, app=None, tools=None):
-    tools = tools or load()
-    store = Store(tools)
-    with store.locked():
-        store.sync()
-        data = store.find(target)
-        require(data is not None, 'Unknown project; no automatic adoption or restore')
-        contents = store.artifacts(data)
-        store.api(target)  # App visibility is independent from private context confidentiality.
-        app = app or ROOT / 'workspaces' / target
-        require(app.is_absolute() and '..' not in app.parts and not any(p.is_symlink() for p in (app, *app.parents))
-                and app != ROOT and not ROOT.is_relative_to(app), 'Invalid restore app path')
-        values(data, app)  # Reject conflicting selected targets before any app/artifact writes.
-        existing_app = app.exists()
-        if not existing_app:
-            app.parent.mkdir(parents=True, exist_ok=True)
-            command = [*store.prefix[:-2], 'clone', '--no-tags', *(['--branch', data['branch']] if data['source_commit'] else []), 'https://github.com/' + target + '.git', str(app)]
-            run(command, store.env, 'GitHub context clone')
+    app = app or Path(os.environ.get('FACTORY_PROJECT_APP', ''))
+    with Project(tools, target, app) as project:
+        project.verify()
         branch, commit = app_identity(tools, app, target)
-        require(commit is not None or data['source_commit'] is None, 'App source is incomplete; preserve and reconcile the interrupted clone')
-        if not existing_app:
-            require(branch == data['branch'], 'Restored app branch differs from durable context')
-        if not existing_app and data['source_commit']:
-            result = subprocess.run([tools['git'], '-C', str(app), 'merge-base', '--is-ancestor', data['source_commit'], commit],
-                                    env=base_env('/tmp'), capture_output=True, timeout=30)
-            require(result.returncode == 0, 'App source is behind or diverges from durable context; preserve and reconcile')
-        pending = []
-        root = Path(os.environ['FACTORY_PRIVATE_ROOT'])
+        with locked(app):
+            data, contents = project.read()
+            if data is None:
+                require(initialize and environment, 'App registry missing; initialize this verified app explicitly')
+                data = dict(schema=2, project_id=project_id(os.environ.get('FACTORY_PROJECT_ID') or str(uuid.uuid4())), repository=target,
+                            environment=environment, branch=branch, source_commit=commit, factory_source_commit=os.environ['FACTORY_SOURCE_REVISION'],
+                            factory_source_repository=os.environ['FACTORY_SOURCE_REPOSITORY'].lower(), publication='private' if project.private else 'public-minimal',
+                            config={'FACTORY_GITHUB_OWNER': target.split('/')[0]}, artifacts={})
+            values(data, app)
+            saved_pending = pending(data)
+            queued = []
+            for name, item in saved_pending.items():
+                source = Path(os.environ['FACTORY_PRIVATE_ROOT']) / relative(name)
+                require(digest(read_private(source)) == item['sha256'], 'Pending evidence changed; reconcile original operation without replay')
+                queued.append((source, item['kind']))
+            require(project.private or not additions and not queued,
+                    'Public app confidential export blocked; local evidence retained. Use project-owned protected/encrypted storage, no central fallback')
+            data.update(branch=branch, source_commit=commit, factory_source_commit=os.environ['FACTORY_SOURCE_REVISION'])
+            if project.private:
+                data['config'].update({key: os.environ[key] for key in CONFIG if os.environ.get(key)
+                                       and (key != 'FACTORY_AWS_REGION' or key not in data['config'])})
+            collect(data, [*queued, *additions], contents)
+            record(data)
+            folder = app / '.factory'
+            folder.mkdir(exist_ok=True)
+            # Write validated artifact bytes first and publish the manifest last. No Git index changes.
+            for name, content in contents.items():
+                path = folder / 'artifacts' / relative(name)
+                require(not any(p.is_symlink() for p in (path, *path.parents)), 'Registry artifact path contains symlink')
+                path.parent.mkdir(parents=True, exist_ok=True)
+                atomic(path, content, 0o644)
+            atomic(folder / 'project.json', json.dumps(data, sort_keys=True).encode() + b'\n', 0o644)
+            if saved_pending:
+                pending_file(data).unlink()
+            return data
+
+
+def restore(target, app=None, tools=None, branch=None):
+    tools = tools or load()
+    app = app or (Path(os.environ['FACTORY_PROJECT_APP']) if os.environ.get('FACTORY_PROJECT_APP') else ROOT / 'workspaces' / target)
+    require(app.is_absolute() and '..' not in app.parts and not any(p.is_symlink() for p in (app, *app.parents))
+            and app != ROOT and not ROOT.is_relative_to(app), 'Invalid restore app path')
+    require(branch is None or re.fullmatch(BRANCH, branch) and '..' not in branch, 'Invalid explicit restore branch')
+    with Project(tools, target, app) as project:
+        project.verify()
+        fresh = not app.exists()
+        if fresh:
+            app.parent.mkdir(parents=True, exist_ok=True)
+            result = subprocess.run([*project.prefix, 'clone', '--no-checkout', '--no-tags', '--single-branch',
+                *(['--branch', branch] if branch else []), 'https://github.com/' + target + '.git', str(app)],
+                env=project.env, capture_output=True, timeout=120)
+            require(result.returncode == 0, 'App clone incomplete; preserve and reconcile the selected app')
+        current, _ = app_identity(tools, app, target)
+        require(not branch or fresh or branch == current, 'Existing app branch differs; preserve it and select explicitly')
+        data, contents = project.read('HEAD' if fresh else None)
+        require(data is not None, 'App has no registered project; explicit initialization required, no implicit adoption')
+        selected = values(data, app)
+        staged = []
         for name, content in contents.items():
-            destination = root / relative(name)
-            require(not any(p.is_symlink() for p in (destination, *destination.parents)), 'Restore path contains a symlink')
+            destination = Path(os.environ['FACTORY_PRIVATE_ROOT']) / relative(name)
+            require(not any(p.is_symlink() for p in (destination, *destination.parents)), 'Restore path contains symlink')
             if destination.exists():
-                require(read_private(destination) == content, 'Existing private artifact differs; no restore overwrites')
+                require(read_private(destination) == content, 'Existing private artifact differs; no overwrites')
             else:
-                pending.append((destination, content))
-        for destination, content in pending:
+                staged.append((destination, content))
+        if fresh:
+            project.git('checkout', '--quiet')
+        for destination, content in staged:
             destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             private_path(destination)
-            with destination.open('xb') as stream:
-                os.chmod(destination, 0o600)
-                stream.write(content)
-        return values(data, app)
+            atomic(destination, content, 0o600)
+        if any(item['kind'] == 'journal' and journal(contents[name], data['project_id'])[-1]['state'] != 'complete'
+               for name, item in data['artifacts'].items()):
+            print('Registry contains unfinished/unknown provider operations; reconcile their outcomes before related writes.', file=sys.stderr)
+        return selected
 
 
 def automatic(record_path, ownership=None):
     if not configured():
         return
-    target = os.environ.get('FACTORY_PROJECT_REPOSITORY', '')
-    if not target:
-        return  # Context-free reads/repository bootstrap have no project namespace to export yet.
-    additions = [(record_path, 'journal')]
-    if ownership:
-        additions.append((ownership, 'ownership'))
-    app = Path(os.environ['FACTORY_PROJECT_APP']) if os.environ.get('FACTORY_PROJECT_APP') else None
-    try:
-        checkpoint(target, app, additions)
-    except Exception:
-        from provider import ProviderError
-        raise ProviderError('Provider result retained; durable context pending. Reconcile storage without replaying the provider operation') from None
+    target, app = os.environ['FACTORY_PROJECT_REPOSITORY'], Path(os.environ.get('FACTORY_PROJECT_APP', ''))
+    tools = load()
+    app_identity(tools, app, target)
+    # Read only this app's local registry; remote checks occur in action preflight/checkpoint/publication.
+    folder = app / '.factory/project.json'
+    require(folder.is_file() and not any(p.is_symlink() for p in (folder, *folder.parents)) and folder.stat().st_size <= 128 * 1024, 'Selected app registry missing')
+    data = record(json.loads(folder.read_bytes()))
+    require(data['repository'] == target, 'Selected registry belongs to another app')
+    values(data, app)
+    with locked(app):
+        queued = pending(data)
+        temporary = dict(data, artifacts=dict(queued), publication='private')
+        contents = {name: read_private(Path(os.environ['FACTORY_PRIVATE_ROOT']) / relative(name)) for name in queued}
+        collect(temporary, [(record_path, 'journal')] + ([(ownership, 'ownership')] if ownership else []), contents)
+        value = dict(schema=1, repository=target, project_id=data['project_id'], artifacts=temporary['artifacts'])
+        atomic(pending_file(data), json.dumps(value, sort_keys=True).encode() + b'\n', 0o600)
 
 
 def preflight(tools=None):
-    if not configured() or not os.environ.get('FACTORY_PROJECT_REPOSITORY'):
+    if not configured():
         return {}
-    target = os.environ['FACTORY_PROJECT_REPOSITORY']
-    selected = restore(target, Path(os.environ['FACTORY_PROJECT_APP']) if os.environ.get('FACTORY_PROJECT_APP') else None, tools)
+    selected = restore(os.environ['FACTORY_PROJECT_REPOSITORY'], tools=tools)
     os.environ.update(selected)
     return selected
 
 
-def reconcile(tools=None):
-    store = Store(tools or load())
-    with store.locked():
-        store.sync(reconcile=True)
-        store.validate_local()
+def publication(tools, target, app, revision='HEAD'):
+    """Validate the committed registry before a normal app push; never stage or commit."""
+    with Project(tools, target, app) as project:
+        project.verify()
+        app_identity(tools, app, target)
+        data, _ = project.read(revision)
+        # No registry is required for initial repository/source bootstrap.
+        if not project.private:
+            commits = project.git('rev-list', '--max-count=129', revision, '--', '.factory').decode().splitlines()
+            require(len(commits) <= 128, 'Public registry history requires explicit bounded confidentiality review')
+            for commit in commits:
+                project.read(commit)
+        return data
+
+
+def reconcile(tools=None, target=None, app=None):
+    """Read remote branch state; normal push only if the remote is an ancestor of local."""
+    tools = tools or load()
+    target = target or os.environ.get('FACTORY_PROJECT_REPOSITORY', '')
+    app = app or Path(os.environ.get('FACTORY_PROJECT_APP', ''))
+    publication(tools, target, app)
+    with Project(tools, target, app) as project:
+        branch, head = app_identity(tools, app, target)
+        require(head is not None, 'Commit app source and registry before publication')
+        # Dirty source/index is preserved and never staged; only the explicit existing commit can be pushed.
+        project.verify()
+        remote = project.git('ls-remote', '--heads', 'origin', 'refs/heads/' + branch).decode().split()
+        require(not remote or len(remote) == 2 and re.fullmatch(r'[a-f0-9]{40}', remote[0]), 'Invalid remote branch readback')
+        if remote and remote[0] == head:
+            return
+        if remote:
+            project.git('fetch', '--no-tags', 'origin', 'refs/heads/' + branch)
+            require(project.git('merge-base', '--is-ancestor', 'FETCH_HEAD', 'HEAD', optional=True) is not None,
+                    'App branch diverged; reconcile deliberately without reset/force/replaying provider work')
+        project.verify()
+        project.git('push', 'origin', 'HEAD:refs/heads/' + branch)
+        observed = project.git('ls-remote', '--heads', 'origin', 'refs/heads/' + branch).decode().split()
+        require(len(observed) == 2 and observed[0] == head, 'App publication outcome unknown; retain commit and reconcile before retry')

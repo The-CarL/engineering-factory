@@ -19,7 +19,7 @@ def provenance(path):
             and all(isinstance(value, str) and 0 < len(value) <= 256 for value in meta.values()), 'Provide exactly the 13 canonical provenance fields')
     project = os.environ.get('FACTORY_PROJECT_ID', '')
     require(str(uuid.UUID(project)) == project and uuid.UUID(project).int != 0 and meta['factoryProjectId'] == project,
-            'Factory project UUID differs from private context')
+            'Factory project UUID differs from selected app registry')
     require(meta['factoryManagedBy'] == 'engineering-factory' and meta['factoryProvenanceVersion'] == '1'
             and meta['factoryEnvironment'] == os.environ.get('FACTORY_ENVIRONMENT')
             and valid_environment(meta['factoryEnvironment']), 'Invalid project/environment provenance')

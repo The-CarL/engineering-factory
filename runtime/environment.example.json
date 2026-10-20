@@ -21,8 +21,6 @@
     "FACTORY_AWS_EXECUTABLE_SHA256",
     "FACTORY_AWS_APP_BOUNDARY_ARN",
     "FACTORY_AWS_APP_POLICY_ARN",
-    "FACTORY_CONTEXT_REPOSITORY",
-    "FACTORY_CONTEXT_DIRECTORY",
     "FACTORY_PROJECT_REPOSITORY",
     "FACTORY_PROJECT_APP"
   ],
@@ -65,7 +63,7 @@
   ],
   "startup_entry": "python3 runtime/start.py --environment-file \"$FACTORY_PRIVATE_ROOT/runtime.env\" && . \"$FACTORY_PRIVATE_ROOT/runtime.env\"",
   "command_directory": "$FACTORY_RUNTIME_DIRECTORY/bin",
-  "notes": "Names and design only; no credentials, private targets or live configuration applied here. Activation explicitly selects factory-token by default. Context repository is optional, dedicated and private. The host must support the required network execution grant; an allowlisted domain alone is insufficient.",
+  "notes": "Names and design only; no credentials, private targets or live configuration applied here. Activation explicitly selects factory-token by default. Project continuity belongs to the selected app repository; no central context repository is used. The host must support the required network execution grant; an allowlisted domain alone is insufficient.",
   "binding_alternatives": [
     {
       "name": "VERCEL_TOKEN",

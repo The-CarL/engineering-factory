@@ -43,6 +43,8 @@ def main():
     parser.add_argument('--environment-file', type=Path, help='Write credential-free activation for this exact installed release')
     parser.add_argument('--source-only', action='store_true', help='Verify/refresh source before installing the matching runtime')
     args = parser.parse_args()
+    from context import reject_legacy
+    reject_legacy()
     changed = args.refresh and refresh()
     if args.source_only:
         from runtime import check_source
