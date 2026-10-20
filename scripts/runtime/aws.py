@@ -51,7 +51,7 @@ def execute(args):
         scope = project_scope(project, environment)
         tags = ['--tags', 'Key=factory:managed-by,Value=engineering-factory',
                 'Key=factory:project-id,Value=' + project, 'Key=factory:environment,Value=' + environment,
-                'Key=factory:scope,Value=' + scope]
+                'Key=factory:s,Value=' + scope]
     operation = Operation(args.record, args.output, 'AWS', json.dumps(command).encode())
     try:
         with tempfile.TemporaryDirectory(prefix='factory-aws-') as temporary:

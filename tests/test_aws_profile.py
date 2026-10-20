@@ -90,33 +90,35 @@ class AWSProfileTests(unittest.TestCase):
     def test_self_contained_iam_boundary_blocks_outside_paths_boundary_removal_and_elevation(self):
         for name in ('runner-boundary.json', 'app-execution-boundary.json'):
             statements = self.result[name]['Statement']
-            iam = next(s for s in statements if s.get('Action') == 'iam:*')
-            self.assertEqual(len(iam['NotResource']), 3)
-            for kind, arn in zip(('role', 'instance-profile', 'policy'), iam['NotResource']):
+            iam = next(s for s in statements if 'NotResource' in s and 'iam:*' in s.get('Action', []))
+            iam_paths = [arn for arn in iam['NotResource'] if arn.startswith('arn:aws:iam:')]
+            self.assertEqual(len(iam_paths), 3)
+            for kind, arn in zip(('role', 'instance-profile', 'policy'), iam_paths):
                 self.assertIn(':' + kind + '/factory/' + profile.SCOPE + '/*', arn)
                 self.assertNotIn(self.arn, arn)
             boundary = next(s for s in statements if s.get('Action') == ['iam:CreateRole', 'iam:PutRolePermissionsBoundary'])
             self.assertEqual(boundary['Effect'], 'Deny')
             self.assertEqual(boundary['Condition']['ArnNotEquals']['iam:PermissionsBoundary'],
                              'arn:aws:iam::123456789012:policy/EngineeringFactoryAppBoundary')
-            self.assertIn(profile.statement('iam:DeleteRolePermissionsBoundary', '*', effect='Deny'), statements)
-            self.assertIn(profile.statement('sts:*', '*', effect='Deny'), statements)
+            global_deny = next(s for s in statements if s['Effect'] == 'Deny' and s.get('Resource') == '*' and 'Condition' not in s)
+            self.assertIn('iam:DeleteRolePermissionsBoundary', global_deny['Action'])
+            self.assertIn('sts:*', global_deny['Action'])
             self.assertIn('identitystore:*', json.dumps(statements))
 
     def test_scope_missing_override_and_canonical_mismatch_are_explicit_denials(self):
         for name in ('runner-boundary.json', 'app-execution-boundary.json'):
             statements = self.result[name]['Statement']
-            relation = next(s for s in statements if 'aws:PrincipalTag/factory:scope' in s.get('Condition', {}).get('StringNotEquals', {}))
+            relation = next(s for s in statements if 'aws:PrincipalTag/factory:s' in s.get('Condition', {}).get('StringNotEquals', {}))
             self.assertEqual(relation['Effect'], 'Deny')
-            value = relation['Condition']['StringNotEquals']['aws:PrincipalTag/factory:scope']
+            value = relation['Condition']['StringNotEquals']['aws:PrincipalTag/factory:s']
             self.assertEqual(value, "${aws:PrincipalTag/factory:project-id, '/'}-${aws:PrincipalTag/factory:environment, '/'}")
         app = self.result['app-execution-boundary.json']['Statement']
         path_guard = next(s for s in app if 'ArnNotLike' in s.get('Condition', {}) and 'aws:PrincipalArn' in s['Condition']['ArnNotLike'])
         self.assertIn('/factory/' + profile.SCOPE + '/*', path_guard['Condition']['ArnNotLike']['aws:PrincipalArn'])
-        meta = next(s for s in app if 'aws:PrincipalTag/factory:scope' in s.get('Condition', {}).get('StringLike', {}))
-        self.assertIn('*${*}*', meta['Condition']['StringLike']['aws:PrincipalTag/factory:scope'])
-        self.assertIn('*${?}*', meta['Condition']['StringLike']['aws:PrincipalTag/factory:scope'])
-        self.assertIn('*-r-*', meta['Condition']['StringLike']['aws:PrincipalTag/factory:scope'])
+        meta = next(s for s in app if 'aws:PrincipalTag/factory:s' in s.get('Condition', {}).get('StringLike', {}))
+        self.assertIn('*${*}*', meta['Condition']['StringLike']['aws:PrincipalTag/factory:s'])
+        self.assertIn('*${?}*', meta['Condition']['StringLike']['aws:PrincipalTag/factory:s'])
+        self.assertIn('*-r-*', meta['Condition']['StringLike']['aws:PrincipalTag/factory:s'])
         self.assertNotIn('DateGreaterThanEquals', json.dumps(app))
         self.assertIn('aws:SecureTransport', json.dumps(app))
         self.assertIn('DateGreaterThanEquals', json.dumps(self.result['runner-boundary.json']))
@@ -124,7 +126,7 @@ class AWSProfileTests(unittest.TestCase):
     def test_tag_session_four_keys_relation_and_default_role_provenance(self):
         for policy in (self.result['bootstrap-policy.json'], self.result['runner-trust.json']):
             tags = next(s for s in policy['Statement'] if s.get('Action') == 'sts:TagSession' and s['Effect'] == 'Allow')
-            self.assertEqual(tags['Condition']['StringEquals']['aws:RequestTag/factory:scope'],
+            self.assertEqual(tags['Condition']['StringEquals']['aws:RequestTag/factory:s'],
                              '${aws:RequestTag/factory:project-id}-${aws:RequestTag/factory:environment}')
             self.assertEqual(len(tags['Condition']['ForAllValues:StringEquals']['aws:TagKeys']), 4)
         environment_guard = next(s for s in self.result['bootstrap-policy.json']['Statement']
@@ -135,12 +137,12 @@ class AWSProfileTests(unittest.TestCase):
         for value in ('dev', 'dev-prod', 'rds'):
             self.assertFalse(any(fnmatch.fnmatchcase(value, p) for p in forbidden))
         create = self.result['app-execution-policy.json']['Statement'][-1]
-        self.assertEqual(create['Condition']['StringEquals']['aws:RequestTag/factory:scope'], profile.SCOPE)
+        self.assertEqual(create['Condition']['StringEquals']['aws:RequestTag/factory:s'], profile.SCOPE)
         self.assertEqual(len(create['Condition']['StringLike']) - 1, 13)
 
     def test_engine_guards_cover_stored_roles_and_cluster_target_not_unsupported_rolearn(self):
         statements = self.result['app-execution-boundary.json']['Statement']
-        engines = next(s for s in statements if 'NotResource' in s and s.get('Action') != 'iam:*')
+        engines = next(s for s in statements if 'NotResource' in s and 'cloudformation:*teStack*' in s.get('Action', []))
         for action in ('cloudformation:ExecuteChangeSet', 'cloudformation:ExecuteStackRefactor',
                        'lambda:UpdateFunctionCode', 'codebuild:StartBuild', 'ecs:CreateService'):
             self.assertTrue(any(fnmatch.fnmatchcase(action.lower(), p.lower()) for p in engines['Action']))
@@ -154,7 +156,7 @@ class AWSProfileTests(unittest.TestCase):
             self.assertTrue(any(fnmatch.fnmatchcase(action, p) for p in cluster['Action']))
         versions = next(s for s in statements if s.get('Action') == 'autoscaling:*')
         self.assertEqual(versions['Condition'], {'Bool': {'autoscaling:LaunchTemplateVersionSpecified': 'false'}})
-        for key in ('ssm:resourceTag/factory:scope', 'aws:ResourceTag/factory:scope'):
+        for key in ('ssm:resourceTag/factory:s', 'aws:ResourceTag/factory:s'):
             self.assertIn(key, json.dumps(statements))
         global_controls = next(s for s in statements if 'ssm:CreateAssociation*' in s.get('Action', []))
         for action in ('ssm:RegisterTaskWithMaintenanceWindow', 'servicecatalog:UpdateConstraint', 'autoscaling:StartInstanceRefresh'):
@@ -189,6 +191,48 @@ class AWSProfileTests(unittest.TestCase):
         self.config['protected_resource_arns'] = ['arn:aws:ec2:us-east-2:123456789012:instance/i-' + str(i).zfill(17) for i in range(100)]
         with self.assertRaisesRegex(ValueError, 'quota'):
             profile.render(*self.args)
+
+    def test_iam_materialization_requires_literal_resource_vendors(self):
+        for policy in self.result.values():
+            for item in policy['Statement']:
+                for field in ('Resource', 'NotResource'):
+                    values = item.get(field, [])
+                    for value in values if isinstance(values, list) else [values]:
+                        if value != '*':
+                            self.assertRegex(value.split(':')[2], r'^[a-z0-9-]+$')
+        namespaced = next(s for s in self.result['app-execution-boundary.json']['Statement'] if 'NotResource' in s)
+        vendors = {arn.split(':')[2] for arn in namespaced['NotResource']}
+        self.assertEqual(vendors, {'iam', 'cloudformation', 'ecs', 'codebuild', 'ssm', 'lambda', 'states'})
+
+    def test_disjoint_vendor_namespace_union_retains_own_and_core_exceptions(self):
+        scope = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-dev'
+        guard = next(s for s in self.result['app-execution-boundary.json']['Statement'] if 'NotResource' in s)
+        exceptions = [p.replace(profile.SCOPE, scope) for p in guard['NotResource']]
+        pairs = [
+            ('arn:aws:iam::123456789012:role/factory/' + scope + '/runtime', True),
+            ('arn:aws:iam::123456789012:role/admin', False),
+            ('*', False),
+            ('arn:aws:cloudformation:us-east-2:123456789012:stack/factory-' + scope + '-r-app/id', True),
+            ('arn:aws:cloudformation:us-east-2:123456789012:stack/core/id', False),
+            ('arn:aws:ecs:us-east-2:123456789012:task-definition/factory-' + scope + '-r-api:1', True),
+            ('arn:aws:ecs:us-east-2:123456789012:task-definition/core:1', False),
+        ]
+        for resource, expected in pairs:
+            self.assertEqual(any(fnmatch.fnmatchcase(resource, p) for p in exceptions), expected, resource)
+        self.assertIn('iam:*', guard['Action'])
+        self.assertIn('cloudformation:*teStack*', guard['Action'])
+        self.assertIn('ecs:RunTask', guard['Action'])
+
+    def test_coalescing_unions_only_actions_of_identical_envelopes(self):
+        first = profile.statement('sts:*', '*', effect='Deny')
+        second = profile.statement(['iam:DeleteRolePermissionsBoundary'], ['*'], effect='Deny')
+        conditional = profile.statement('sts:*', '*', {'Bool': {'aws:SecureTransport': 'false'}}, effect='Deny')
+        original = profile.document([first, second, conditional])
+        merged = profile.strip_sids(original)
+        self.assertEqual(len(merged['Statement']), 2)
+        self.assertEqual(merged['Statement'][0]['Action'], ['sts:*', 'iam:DeleteRolePermissionsBoundary'])
+        self.assertEqual(merged['Statement'][1], conditional)
+        self.assertEqual(original['Statement'][0], first)
 
     def test_cli_private_hashes_and_invalid_input_has_no_partial_output(self):
         with tempfile.TemporaryDirectory() as directory:

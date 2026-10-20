@@ -89,7 +89,7 @@ class RuntimeTests(unittest.TestCase):
         assume, _, service = self.calls
         self.assertIn('Key=factory:project-id,Value=' + project, assume[0])
         self.assertIn('Key=factory:managed-by,Value=engineering-factory', assume[0])
-        self.assertIn('Key=factory:scope,Value=' + project + '-development', assume[0])
+        self.assertIn('Key=factory:s,Value=' + project + '-development', assume[0])
         self.assertNotIn('untrusted-independent-override', ' '.join(assume[0]))
         self.assertNotIn('FACTORY_AWS_SCOPE', service[1])
         self.assertEqual(service[0][1:3], ['s3api', 'create-bucket'])

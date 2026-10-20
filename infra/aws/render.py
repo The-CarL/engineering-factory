@@ -13,7 +13,7 @@ TAG_KEYS = ('project-id', 'environment', 'owner', 'managed-by', 'source-repo', '
             'provenance-version', 'expires-at')
 PROJECT = '${aws:PrincipalTag/factory:project-id}'
 ENVIRONMENT = '${aws:PrincipalTag/factory:environment}'
-SCOPE = '${aws:PrincipalTag/factory:scope}'
+SCOPE = '${aws:PrincipalTag/factory:s}'
 ADMIN_ACTIONS = ('iam:*', 'organizations:*', 'account:*', 'account-access:*', 'sso:*', 'sso-directory:*',
                  'identitystore:*', 'rolesanywhere:*', 'aws-portal:*', 'billing:*', 'budgets:*', 'payments:*', 'tax:*')
 
@@ -39,7 +39,7 @@ def creation():
     result = context()
     result['StringEquals'].update({'aws:RequestTag/factory:managed-by': 'engineering-factory',
         'aws:RequestTag/factory:project-id': PROJECT, 'aws:RequestTag/factory:environment': ENVIRONMENT,
-        'aws:RequestTag/factory:provenance-version': '1', 'aws:RequestTag/factory:scope': SCOPE})
+        'aws:RequestTag/factory:provenance-version': '1', 'aws:RequestTag/factory:s': SCOPE})
     result['StringLike'].update({'aws:RequestTag/factory:' + key: '?*' for key in TAG_KEYS})
     return result
 
@@ -108,7 +108,7 @@ def dns_permissions(baseline):
 
 def delegation_guards(account, protected):
     prefix = 'factory-' + SCOPE + '-r-*'
-    scoped = [f'arn:aws:*:*:{account}:*/{prefix}',
+    scoped = [f'arn:aws:{service}:*:{account}:*/{prefix}' for service in ('cloudformation', 'ecs', 'codebuild', 'ssm')] + [
               f'arn:aws:lambda:*:{account}:function:{prefix}',
               f'arn:aws:states:*:{account}:stateMachine:{prefix}',
               f'arn:aws:states:*:{account}:execution:{prefix}:*']
@@ -128,12 +128,12 @@ def delegation_guards(account, protected):
     result = [deny(operations, NotResource=scoped),
         deny('autoscaling:*', {'Bool': {'autoscaling:LaunchTemplateVersionSpecified': 'false'}}),
         deny('lambda:*ateEventSourceMapping',
-             {'ArnNotLike': {'lambda:FunctionArn': scoped[1]}}),
+             {'ArnNotLike': {'lambda:FunctionArn': f'arn:aws:lambda:*:{account}:function:{prefix}'}}),
         deny(['ecs:RunTask', 'ecs:StartTask', 'ecs:*Service', 'ecs:*TaskSet'], {'ArnNotLike': {'ecs:cluster': f'arn:aws:ecs:*:{account}:cluster/{prefix}'}}),
-        deny(['ssm:SendCommand', 'ssm:StartSession'], {'StringNotEquals': {'ssm:resourceTag/factory:scope': SCOPE}},
+        deny(['ssm:SendCommand', 'ssm:StartSession'], {'StringNotEquals': {'ssm:resourceTag/factory:s': SCOPE}},
              [f'arn:aws:ec2:*:{account}:instance/*', f'arn:aws:ssm:*:{account}:managed-instance/*']),
         deny(['servicecatalog:ProvisionProduct', 'servicecatalog:CreateConstraint'],
-             {'StringNotEquals': {'aws:ResourceTag/factory:scope': SCOPE}}, f'arn:aws:catalog:*:{account}:product/*'),
+             {'StringNotEquals': {'aws:ResourceTag/factory:s': SCOPE}}, f'arn:aws:catalog:*:{account}:product/*'),
         deny('sts:*'),
         deny(['autoscaling:StartInstanceRefresh', 'cloudformation:*OrganizationsAccess', 'servicecatalog:*OrganizationsAccess',
               'servicecatalog:UpdateConstraint', 'servicecatalog:UpdateProvisionedProduct',
@@ -146,9 +146,28 @@ def delegation_guards(account, protected):
 
 
 def strip_sids(policy):
+    """Coalesce only identical envelopes: their Action alternatives are an exact union."""
     result = copy.deepcopy(policy)
+    grouped = {}
+    statements = []
     for item in result['Statement']:
         item.pop('Sid', None)
+        for key in ('Action', 'NotAction', 'Resource', 'NotResource'):
+            if isinstance(item.get(key), list) and len(item[key]) == 1:
+                item[key] = item[key][0]
+        if 'Action' not in item:
+            statements.append(item)
+            continue
+        signature = json.dumps({k: v for k, v in item.items() if k != 'Action'}, sort_keys=True)
+        if signature not in grouped:
+            grouped[signature] = item
+            statements.append(item)
+            continue
+        previous = grouped[signature]
+        actions = previous['Action'] if isinstance(previous['Action'], list) else [previous['Action']]
+        extra = item['Action'] if isinstance(item['Action'], list) else [item['Action']]
+        previous['Action'] = list(dict.fromkeys(actions + extra))
+    result['Statement'] = statements
     return result
 
 
@@ -180,9 +199,15 @@ def render(config, baseline, boundary, bootstrap, trust):
     broad = {'Effect': 'Allow', 'NotAction': ['route53:*', 'route53domains:*'], 'Resource': '*', 'Condition': context()}
     allows = [broad, *dns]
     iam_guards = iam_envelope(app_role, app_boundary)
+    # Resource vendors are literal and disjoint: the union cannot make an IAM ARN
+    # exempt an engine action, or make an engine ARN exempt an IAM action.
+    namespace = {'Effect': 'Deny', 'Action': ['iam:*'] + guards[0]['Action'],
+                 'NotResource': iam_guards[0]['NotResource'] + guards[0]['NotResource']}
+    iam_guards = iam_guards[1:]
+    guards = [namespace] + guards[1:]
     # Default values keep the negative comparison valid even when canonical tags are absent.
     # Missing scope also makes StringNotEquals true, so this is an explicit fail-closed deny.
-    relation = statement('*', '*', {'StringNotEquals': {'aws:PrincipalTag/factory:scope':
+    relation = statement('*', '*', {'StringNotEquals': {'aws:PrincipalTag/factory:s':
         "${aws:PrincipalTag/factory:project-id, '/'}-${aws:PrincipalTag/factory:environment, '/'}"}}, effect='Deny')
     allows[0]['Condition'] = {'StringLike': {'aws:PrincipalTag/factory:project-id': '????????-????-????-????-????????????'}}
     transport = [s for s in baseline['Statement'] if s.get('Sid') == 'DenyInsecureTransport']
@@ -244,7 +269,7 @@ def render(config, baseline, boundary, bootstrap, trust):
     new_trust['Statement'].append(tagged_trust)
     app_guard = statement('*', '*', {'ArnNotLike': {'aws:PrincipalArn': app_role}}, effect='Deny')
     metachar = [statement('*', '*', {'StringLike': {'aws:PrincipalTag/factory:' + key:
-        ['*${*}*', '*${?}*', '*--*', '*-r', '*-r-*']}}, effect='Deny') for key in ('scope',)]
+        ['*${*}*', '*${?}*', '*--*', '*-r', '*-r-*']}}, effect='Deny') for key in ('s',)]
     deployed_allows = copy.deepcopy(allows)
     deployed_allows[0].pop('Condition')
     deployed = document([*deployed_allows, relation, admin, *iam_guards, *guards, *transport, app_guard, *metachar])
@@ -260,6 +285,12 @@ def render(config, baseline, boundary, bootstrap, trust):
         'app-execution-boundary.json': strip_sids(deployed), 'app-execution-policy.json': strip_sids(identity),
         'runner-app-1.json': strip_sids(identity)}
     for name, policy in result.items():
+        for item in policy['Statement']:
+            for field in ('Resource', 'NotResource'):
+                values = item.get(field, [])
+                for value in values if isinstance(values, list) else [values]:
+                    if value != '*' and (not value.startswith('arn:aws:') or not re.fullmatch(r'[a-z0-9-]+', value.split(':')[2])):
+                        raise ValueError('Resource ARN vendors must be literal, not wildcard expressions')
         maximum = 2048 if name == 'bootstrap-policy.json' else 6144
         if len(compact(policy)) > maximum:
             raise ValueError('Rendered policy exceeds its quota; never drop protections to fit: ' + name)
@@ -272,10 +303,10 @@ def merge_conditions(target, source):
 
 def creation_session_condition():
     return {'StringEquals': {'aws:RequestTag/factory:managed-by': 'engineering-factory',
-                'aws:RequestTag/factory:scope': '${aws:RequestTag/factory:project-id}-${aws:RequestTag/factory:environment}'},
+                'aws:RequestTag/factory:s': '${aws:RequestTag/factory:project-id}-${aws:RequestTag/factory:environment}'},
             'StringLike': {'aws:RequestTag/factory:project-id': '????????-????-????-????-????????????',
                            'aws:RequestTag/factory:environment': '?*'},
-            'ForAllValues:StringEquals': {'aws:TagKeys': ['factory:managed-by', 'factory:project-id', 'factory:environment', 'factory:scope']},
+            'ForAllValues:StringEquals': {'aws:TagKeys': ['factory:managed-by', 'factory:project-id', 'factory:environment', 'factory:s']},
             'Null': {'aws:TagKeys': 'false'}}
 
 

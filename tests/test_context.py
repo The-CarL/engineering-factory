@@ -188,7 +188,7 @@ class ContextTests(unittest.TestCase):
                 session_arn = 'arn:aws:sts::' + account + ':assumed-role/' + role + '/' + session
                 self.assertIn('Key=factory:project-id,Value=' + initial['project_id'], command)
                 self.assertIn('Key=factory:environment,Value=development', command)
-                self.assertIn('Key=factory:scope,Value=' + initial['project_id'] + '-development', command)
+                self.assertIn('Key=factory:s,Value=' + initial['project_id'] + '-development', command)
                 return json.dumps(dict(AssumedRoleUser=dict(Arn=session_arn), Credentials=dict(AccessKeyId=access,
                     SecretAccessKey=secret, SessionToken=token, Expiration=(datetime.now(timezone.utc) + timedelta(seconds=899)).isoformat()))).encode()
             if command[1:3] == ['sts', 'get-caller-identity']:
