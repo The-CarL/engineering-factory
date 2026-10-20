@@ -93,6 +93,12 @@ The runner supports scoped REST operations, `repo create` and ordinary PR create
 
 These are software target checks, not token isolation. An all-repositories Contents token can still modify existing repository contents when used outside the approved path; withholding Administration does not remove that authority. Review actual scope and private access exceptions. Do not use the runtime to adopt core repositories implicitly.
 
+## Vercel credential transport
+
+A CLI-capable factory should request a **direct secret environment binding** for `VERCEL_TOKEN` after explicit approval, with personal **Only me** visibility and selected-environment scope. The pinned CLI supports that environment variable; use it without a token argument. This makes the raw token readable by approved task processes/code, so it is a material exposure change from HTTPS placeholder substitution. No installer, wrapper or documentation update authorizes or applies that binding automatically. See [credential approval](credential-checklist.md#add-values-outside-git) and the [personal-value configuration contract](https://learn.chatgpt.com/docs/environments/cloud-environments#supply-personal-values).
+
+A REST-only capability may keep the separately documented personal network-secret alternative for `api.vercel.com`. Both designs retain the fixed REST HTTPS recipient and redirect refusal; choosing direct exposure does not broaden provider/team/project grants or certify arbitrary recipients. Select one transport for the key. Actual Cloud checks on **2026-10-20** found REST principal/exact-team reads succeeded while native Vercel 64.5.0 rejected the network-secret placeholder during token validation before HTTP. That observation is version/transport-specific. Future readiness must test the real pinned native CLI with its selected binding and exact target independently; REST success, an API fallback or a shim cannot pass the CLI gate. Write/deployment acceptance remains separate.
+
 ## Vercel API operations
 
 ```bash

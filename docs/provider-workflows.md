@@ -42,6 +42,8 @@ The selector controls the subprocess source; it does not prove Git's HTTPS/crede
 ./scripts/preflight.sh --provider vercel --vercel-transport api
 ```
 
+For a CLI-capable factory, use the explicitly approved personal **Only me** direct secret `VERCEL_TOKEN` environment design in [the credential checklist](credential-checklist.md#add-values-outside-git); approved task code can read its raw value. A REST-only network-secret binding is a separate alternative, not a native CLI solution. No `--token` secret argv, shim or silent transport switch is permitted.
+
 The default remains the native CLI gate. The API gate uses `GET /v2/user` and `GET /v2/teams/ID`, verifies the exact approved team ID/slug and reports REST separately. It sends the existing `VERCEL_TOKEN` binding only to `https://api.vercel.com`; redirects are refused. A project-scoped token may not permit these reads. Stop and review a narrower identity contract instead of broadening the token or silently switching credentials.
 
 ## New Vercel project and initial release
