@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 
-from provider import ProviderError
+from provider import ProviderError, transport_reason
 
 ROOT = Path(__file__).resolve().parents[2]
 NETWORK = ('HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy',
@@ -176,8 +176,8 @@ def run(command, env, provider, timeout=120, input=None, cwd=None):
     from provider import diagnostic
     try:
         result = subprocess.run(command, env=env, cwd=cwd, input=input, capture_output=True, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired):
-        raise ProviderError(provider + '; transport failure; outcome may be unknown') from None
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ProviderError(provider + '; ' + transport_reason(error) + '; HTTP unconfirmed; outcome may be unknown') from None
     if result.returncode:
         if provider == 'AWS':
             code = next((code for code in ('AccessDenied', 'ExpiredToken', 'InvalidClientTokenId', 'Throttling',

@@ -2,6 +2,16 @@
 
 The runtime supplies general provider commands for selected application workloads. It installs no application, CI workflow, IAM grant or environment binding. Provider permissions, exact task scope and action-time controls remain the boundary; runtime commands do not authorize operations or make core resources safe by naming them.
 
+## Diagnose the executing snapshot
+
+Run `python3 runtime/diagnose.py` before troubleshooting a saved snapshot. It needs no configured runtime or credentials and makes no network requests by default. It reports missing source selectors/manifest/private root, the declared GitHub credential source and namespaced binding presence without values, then attempts source/runtime integrity verification in a credential-free child bounded to 10 seconds. A missing binding or selector is configuration evidence, not a provider permission decision. GitHub diagnosis requires no AWS configuration.
+
+Use `python3 runtime/diagnose.py --network` only when the task's internet access is approved. This adds one unauthenticated fixed GitHub API HTTPS request, preserving inherited approved proxy/CA settings and TLS verification, refusing redirects and forwarding no provider tokens. The URL timeout is 4 seconds and the network child deadline is 6 seconds; DNS/socket stalls are contained by the child deadline. Results distinguish OS permission denial, DNS, TLS, proxy-tunnel/connection failure, HTTP response and timeout. An HTTP response proves neither GitHub authentication nor write access; transport failure does not establish that HTTP/authentication was reached.
+
+The flushed `execution-start` marker precedes probes; separate probe markers and `child_started` distinguish observed process progress. Tool scheduling, action-time approval and OS process creation can occur before a child deadline can start, as described in the [Python subprocess contract](https://docs.python.org/3.12/library/subprocess.html#subprocess.run). A missing or delayed marker alone does not identify the cause. Preserve elapsed times and classifications without raw errors, secret values or environment dumps.
+
+For a fresh published task, verify the **executing** checkout/reviewed revision, selected configuration and retained runtime integrity, then the selected provider's actual credential transport and effective grants. Source CI, a saved/published setting or an older snapshot's success cannot certify another task. A blocked or untested gate stays blocked or untested; do not start mutations to diagnose it.
+
 ## Prepared-host installation and startup
 
 `runtime/pins.json` targets Linux x86_64 with prepared Git 2.52.0, Python 3.12.14, Node 24.19.0 and npm 11.9.0. The installer verifies those host versions, official gh 2.102.0 and AWS CLI 2.38.1 archive SHA256 pins, and the Vercel 64.5.0 npm lockfile. It uses credential-free child environments and `npm ci --ignore-scripts`; it does not bootstrap an empty OS, install host languages, run package hooks or retain download caches. Archive pins select the official distribution artifacts. Pin changes require independent hash/signature review against the publisher, including the official AWS signature.

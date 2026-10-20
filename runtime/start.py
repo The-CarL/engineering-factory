@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify runtime/source readiness; optional clean-main fast-forward to approved source."""
+"""Verify runtime/source integrity; use diagnose.py first when setup is missing or blocked."""
 import os
 from pathlib import Path
 import re
