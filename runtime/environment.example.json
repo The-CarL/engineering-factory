@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "host_contract": "Linux x86_64 prepared host; versions in runtime/pins.json",
+  "host_contract": "Linux x86_64/glibc >=2.28; system Git >=2.39 and Python >=3.10. Pinned Node/npm bootstrapped by runtime/setup.py; exact base binaries recorded in manifest.",
   "private_configuration_names": [
     "FACTORY_SOURCE_REPOSITORY",
     "FACTORY_SOURCE_REVISION",
@@ -20,7 +20,11 @@
     "FACTORY_AWS_EXECUTABLE",
     "FACTORY_AWS_EXECUTABLE_SHA256",
     "FACTORY_AWS_APP_BOUNDARY_ARN",
-    "FACTORY_AWS_APP_POLICY_ARN"
+    "FACTORY_AWS_APP_POLICY_ARN",
+    "FACTORY_CONTEXT_REPOSITORY",
+    "FACTORY_CONTEXT_DIRECTORY",
+    "FACTORY_PROJECT_REPOSITORY",
+    "FACTORY_PROJECT_APP"
   ],
   "personal_binding_design": [
     {
@@ -33,10 +37,14 @@
     },
     {
       "name": "VERCEL_TOKEN",
-      "mechanism": "network secret",
-      "https_recipients": [
-        "api.vercel.com"
-      ]
+      "mechanism": "direct secret environment binding",
+      "capability": "native Vercel CLI plus REST (preferred CLI-capable design)",
+      "visibility": "Only me",
+      "environment_scope": "selected factory environment",
+      "task_code_exposure": "Raw token is readable by approved task processes/code; requires explicit binding approval.",
+      "fixed_rest_recipient": "https://api.vercel.com",
+      "argv_policy": "Use VERCEL_TOKEN; never pass a token through --token or other command arguments.",
+      "acceptance": "Test the pinned native CLI identity/target contract separately from REST and from write/deployment gates."
     },
     {
       "name": "AWS_ACCESS_KEY_ID",
@@ -53,9 +61,23 @@
   ],
   "setup_entries": [
     "python3 runtime/start.py --refresh --source-only",
-    "python3 runtime/install.py --destination $FACTORY_RUNTIME_DIRECTORY"
+    "python3 runtime/setup.py"
   ],
-  "startup_entry": "python3 runtime/start.py",
+  "startup_entry": "python3 runtime/start.py --environment-file \"$FACTORY_PRIVATE_ROOT/runtime.env\" && . \"$FACTORY_PRIVATE_ROOT/runtime.env\"",
   "command_directory": "$FACTORY_RUNTIME_DIRECTORY/bin",
-  "notes": "Names and design only; no credentials, private target values or environment configuration are applied by this file. Explicit Cloud source selection uses FACTORY_GITHUB_CREDENTIAL_SOURCE=factory-token."
+  "notes": "Names and design only; no credentials, private targets or live configuration applied here. Activation explicitly selects factory-token by default. Context repository is optional, dedicated and private. The host must support the required network execution grant; an allowlisted domain alone is insufficient.",
+  "binding_alternatives": [
+    {
+      "name": "VERCEL_TOKEN",
+      "mechanism": "network secret",
+      "capability": "REST-only alternative; does not establish native CLI compatibility",
+      "visibility": "Only me",
+      "environment_scope": "selected factory environment",
+      "https_recipients": [
+        "api.vercel.com"
+      ],
+      "selection": "Choose one reviewed transport for this key; do not configure competing bindings. Changing raw-token exposure requires explicit approval.",
+      "observation": "2026-10-20: Vercel 64.5.0 REST identity/team reads worked while the native CLI rejected the network-secret placeholder before HTTP."
+    }
+  ]
 }

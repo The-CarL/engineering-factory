@@ -81,7 +81,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_aws_forwards_write_with_only_verified_assumed_credentials_and_tags(self):
         project = str(uuid.uuid4())
-        os.environ.update(FACTORY_PROJECT_ID=project, FACTORY_ENVIRONMENT='development', AWS_PROFILE='personal',
+        os.environ.update(FACTORY_PROJECT_ID=project, FACTORY_ENVIRONMENT='development', FACTORY_AWS_SCOPE='untrusted-independent-override', AWS_PROFILE='personal',
                           AWS_ENDPOINT_URL='https://wrong.invalid', AWS_WEB_IDENTITY_TOKEN_FILE='/private/token',
                           AWS_CONTAINER_CREDENTIALS_FULL_URI='http://wrong.invalid', AWS_DATA_PATH='/untrusted',
                           GH_DEBUG='api', GIT_TRACE='1')
@@ -89,6 +89,9 @@ class RuntimeTests(unittest.TestCase):
         assume, _, service = self.calls
         self.assertIn('Key=factory:project-id,Value=' + project, assume[0])
         self.assertIn('Key=factory:managed-by,Value=engineering-factory', assume[0])
+        self.assertIn('Key=factory:s,Value=' + project + '-development', assume[0])
+        self.assertNotIn('untrusted-independent-override', ' '.join(assume[0]))
+        self.assertNotIn('FACTORY_AWS_SCOPE', service[1])
         self.assertEqual(service[0][1:3], ['s3api', 'create-bucket'])
         self.assertEqual(service[1]['AWS_SESSION_TOKEN'], self.session)
         for key in ('AWS_PROFILE', 'AWS_ENDPOINT_URL', 'AWS_WEB_IDENTITY_TOKEN_FILE', 'AWS_CONTAINER_CREDENTIALS_FULL_URI', 'AWS_DATA_PATH', 'GH_TOKEN', 'FACTORY_GITHUB_TOKEN', 'GH_DEBUG'):
@@ -97,6 +100,29 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(os.environ['AWS_SECRET_ACCESS_KEY'], self.bootstrap)
         self.assertEqual(self.output.read_bytes(), b'{"accepted":true}')
         self.assertNotIn(self.secret, self.record.read_text())
+
+
+    def test_canonical_scope_reserves_r_component_and_valid_resource_hyphens(self):
+        project = '12345678-1234-1234-1234-123456789abc'
+        for environment in ('development', 'prod-2', 'rds', 'r1', 'a' * 32):
+            self.assertTrue(guard.valid_environment(environment))
+            self.assertEqual(guard.project_scope(project, environment), project + '-' + environment)
+        for environment in ('r', 'r-blue', 'prod-r', 'prod-r-blue', 'prod--blue', 'prod-', '-prod', 'Prod', 'a' * 33):
+            self.assertFalse(guard.valid_environment(environment))
+            with self.assertRaises(ProviderError):
+                guard.project_scope(project, environment)
+        for invalid in (project.upper(), project.replace('-', ''), project + '*', '00000000-0000-0000-0000-000000000000'):
+            with self.assertRaises(ProviderError):
+                guard.project_scope(invalid, 'development')
+
+    def test_invalid_scope_environment_stops_before_assume_role_or_operation_record(self):
+        os.environ['FACTORY_PROJECT_ID'] = str(uuid.uuid4())
+        for environment in ('r', 'r-blue', 'prod-r', 'prod-r-blue', 'prod--blue', 'prod-'):
+            os.environ['FACTORY_ENVIRONMENT'] = environment
+            with self.assertRaises(ProviderError):
+                self.execute_aws(['s3api', 'create-bucket', '--bucket', 'fixture-owned-resource'])
+            self.assertEqual(self.calls, [])
+            self.assertFalse(self.record.exists())
 
     def test_wrong_assumed_identity_blocks_service_and_does_not_fallback(self):
         def wrong(command, env, provider, **kwargs):

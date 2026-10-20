@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Verify runtime/source readiness; optional clean-main fast-forward to approved source."""
+"""Verify runtime/source integrity; use diagnose.py first when setup is missing or blocked."""
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts/lib'))
-from runtime import ROOT, Parser, base_env, cli, load, require
+from runtime import ROOT, Parser, base_env, cli, load, require, write_environment
 
 
 def refresh():
@@ -40,6 +40,7 @@ def refresh():
 def main():
     parser = Parser(description=__doc__)
     parser.add_argument('--refresh', action='store_true')
+    parser.add_argument('--environment-file', type=Path, help='Write credential-free activation for this exact installed release')
     parser.add_argument('--source-only', action='store_true', help='Verify/refresh source before installing the matching runtime')
     args = parser.parse_args()
     changed = args.refresh and refresh()
@@ -50,8 +51,14 @@ def main():
         return
     if changed:
         # Execute the approved new source, not this old imported module.
-        os.execv(sys.executable, [sys.executable, str(ROOT / 'runtime/start.py')])
+        os.execv(sys.executable, [sys.executable, str(ROOT / 'runtime/start.py'), *(['--environment-file', str(args.environment_file)] if args.environment_file else [])])
     tools = load()
+    project = None
+    if os.environ.get('FACTORY_PROJECT_REPOSITORY'):
+        from context import restore
+        project = restore(os.environ['FACTORY_PROJECT_REPOSITORY'], tools=tools)
+    if args.environment_file:
+        write_environment(args.environment_file, tools, project)
     print('Factory source and retained tool integrity verified. Read the current AGENTS.md before work.')
     print('Provider credential transports, IAM grants and workload acceptance require their separate actual checks.')
     require(all(Path(path).is_file() for path in tools.values()), 'Runtime tools unavailable')

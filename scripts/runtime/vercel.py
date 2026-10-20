@@ -9,7 +9,7 @@ import sys
 import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
 from provider import METADATA, Vercel
-from runtime import Operation, Parser, cli, digest, event, known_credentials, load, private_path, read_private, require
+from runtime import Operation, Parser, cli, digest, event, known_credentials, load, private_path, read_private, require, valid_environment
 
 
 def provenance(path):
@@ -22,7 +22,7 @@ def provenance(path):
             'Factory project UUID differs from private context')
     require(meta['factoryManagedBy'] == 'engineering-factory' and meta['factoryProvenanceVersion'] == '1'
             and meta['factoryEnvironment'] == os.environ.get('FACTORY_ENVIRONMENT')
-            and re.fullmatch(r'[a-z][a-z0-9-]{0,31}', meta['factoryEnvironment']), 'Invalid project/environment provenance')
+            and valid_environment(meta['factoryEnvironment']), 'Invalid project/environment provenance')
     for key in ('factorySourceCommit', 'factoryLastSourceCommit'):
         require(re.fullmatch(r'[a-f0-9]{40}', meta[key]), 'Exact source commits are required')
     for key in ('factoryOwner', 'factoryCreatedBy', 'factoryCreationRunId', 'factoryLastRunId'):
@@ -57,7 +57,9 @@ def owned(path, team, project, meta):
 
 
 def execute(args):
-    load()
+    tools = load()
+    from context import preflight
+    preflight(tools)
     team = os.environ.get('FACTORY_VERCEL_TEAM_ID', '')
     slug = os.environ.get('FACTORY_VERCEL_TEAM_SLUG', '')
     require(re.fullmatch(r'team_[A-Za-z0-9]+', team) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*', slug), 'Set exact approved Vercel team ID/slug')
@@ -129,7 +131,7 @@ def execute(args):
                     and saved['ssoProtection'].get('deploymentType') == 'all',
                     'Created project configuration readback mismatch; reconcile without retry')
             event(operation.record, 'created-resource', team=team, project=result['id'], name=args.project, metadata=meta)
-        operation.finish(json.dumps(result, sort_keys=True).encode() + b'\n', known_credentials(), quiet=creation)
+        operation.finish(json.dumps(result, sort_keys=True).encode() + b'\n', known_credentials(), quiet=creation, persist=not creation)
         if creation:
             receipt = dict(schema=1, factory_project_id=meta['factoryProjectId'], team_id=team, project_id=result['id'],
                            project_name=args.project, metadata=meta,
@@ -139,6 +141,8 @@ def execute(args):
                 stream.write(json.dumps(receipt, sort_keys=True) + '\n')
                 stream.flush()
                 os.fsync(stream.fileno())
+            from context import automatic
+            automatic(operation.record, ownership_path)
             print('Project created/read back; private ownership and provenance retained.')
     except Exception:
         operation.failed()

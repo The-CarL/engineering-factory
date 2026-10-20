@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""Render a reusable project-scoped AWS application profile. Never applies policies."""
+"""Prepare general application permissions with immutable AWS control-plane guards."""
 import argparse
 import copy
+import hashlib
 import json
+import os
 from pathlib import Path
 import re
 
-TAG_KEYS = (
-    'project-id', 'environment', 'owner', 'managed-by', 'source-repo', 'source-commit',
-    'created-by', 'created-at', 'creation-run-id', 'last-run-id', 'last-source-commit',
-    'provenance-version', 'expires-at',
-)
-ORIGINAL_TAGS = ['factory:' + k for k in TAG_KEYS if k not in ('last-run-id', 'last-source-commit', 'expires-at')]
+TAG_KEYS = ('project-id', 'environment', 'owner', 'managed-by', 'source-repo', 'source-commit',
+            'created-by', 'created-at', 'creation-run-id', 'last-run-id', 'last-source-commit',
+            'provenance-version', 'expires-at')
 PROJECT = '${aws:PrincipalTag/factory:project-id}'
 ENVIRONMENT = '${aws:PrincipalTag/factory:environment}'
+SCOPE = '${aws:PrincipalTag/factory:s}'
+ADMIN_ACTIONS = ('iam:*', 'organizations:*', 'account:*', 'account-access:*', 'sso:*', 'sso-directory:*',
+                 'identitystore:*', 'rolesanywhere:*', 'aws-portal:*', 'billing:*', 'budgets:*', 'payments:*', 'tax:*')
 
 
 def document(statements):
-    return {'Version': '2012-10-17', 'Statement': statements}
+    return {'Version': '2012-10-17', 'Statement': copy.deepcopy(statements)}
 
 
 def statement(actions, resources, condition=None, effect='Allow', **extra):
@@ -35,28 +37,138 @@ def context():
 
 def creation():
     result = context()
-    result['StringEquals'].update({
-        'aws:RequestTag/factory:managed-by': 'engineering-factory',
-        'aws:RequestTag/factory:project-id': PROJECT,
-        'aws:RequestTag/factory:environment': ENVIRONMENT,
-        'aws:RequestTag/factory:provenance-version': '1',
-    })
-    result['StringLike'].update({'aws:RequestTag/factory:' + k: '?*' for k in TAG_KEYS})
-    return result
-
-
-def owned():
-    result = context()
-    result['StringEquals'].update({
-        'aws:ResourceTag/factory:managed-by': 'engineering-factory',
-        'aws:ResourceTag/factory:project-id': PROJECT,
-        'aws:ResourceTag/factory:environment': ENVIRONMENT,
-    })
+    result['StringEquals'].update({'aws:RequestTag/factory:managed-by': 'engineering-factory',
+        'aws:RequestTag/factory:project-id': PROJECT, 'aws:RequestTag/factory:environment': ENVIRONMENT,
+        'aws:RequestTag/factory:provenance-version': '1', 'aws:RequestTag/factory:s': SCOPE})
+    result['StringLike'].update({'aws:RequestTag/factory:' + key: '?*' for key in TAG_KEYS})
     return result
 
 
 def read_json(path):
     return json.loads(Path(path).read_text())
+
+
+def compact(policy):
+    return json.dumps(policy, separators=(',', ':'), sort_keys=True).encode()
+
+
+def protected_resources(config):
+    resources = config['protected_resource_arns']
+    if not isinstance(resources, list) or any(not isinstance(value, str) or not re.fullmatch(r'arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]*:[A-Za-z0-9_./:+=,@-]+', value)
+            or value.split(':')[2] in ('iam', 'route53', 'route53domains')
+            or value.split(':')[4] not in ('', config['account_id']) for value in resources):
+        raise ValueError('Protected resources must be exact commercial-account resource ARNs; DNS/IAM use their own envelopes')
+    # A global service deny already protects these exact ARNs; avoid duplicating them in a size-limited boundary.
+    denied_services = {action.split(':')[0] for action in ADMIN_ACTIONS if action != 'iam:*'}
+    result = {value for value in resources if value.split(':')[2] not in denied_services}
+    for value in resources:
+        if value.startswith('arn:aws:s3:::') and '/' not in value.split(':::', 1)[1]:
+            result.add(value + '/*')
+        if value.startswith('arn:aws:lambda:') and ':function:' in value and len(value.split(':')) == 7:
+            result.add(value + ':*')
+    return sorted(result)
+
+
+def iam_envelope(app_role, app_boundary):
+    paths = [app_role.replace(':role/', ':' + kind + '/') for kind in ('role', 'instance-profile', 'policy')]
+    return [
+        {'Effect': 'Deny', 'Action': 'iam:*', 'NotResource': paths},
+        statement(['iam:CreateRole', 'iam:PutRolePermissionsBoundary'], '*',
+                  {'ArnNotEquals': {'iam:PermissionsBoundary': app_boundary}}, effect='Deny'),
+        statement('iam:DeleteRolePermissionsBoundary', '*', effect='Deny'),
+    ]
+
+
+def dns_permissions(baseline):
+    original = next(s for s in baseline['Statement'] if s.get('Sid') == 'CreateNamesInReservedFactoryNamespace')
+    if (original.get('Effect') != 'Allow' or original.get('Action') != 'route53:ChangeResourceRecordSets'
+            or not isinstance(original.get('Resource'), str)
+            or not re.fullmatch(r'arn:aws:route53:::hostedzone/[A-Z0-9]+', original['Resource'])):
+        raise ValueError('Expected one exact approved hosted zone')
+    condition = original['Condition']
+    old = condition['ForAllValues:StringLike']['route53:ChangeResourceRecordSetsNormalizedRecordNames']
+    if not isinstance(old, list):
+        old = [old]
+    if len(old) != 1 or not old[0].startswith('factory-*.') or '*' in old[0][len('factory-*.'):]:
+        raise ValueError('Expected one original reserved DNS domain')
+    suffix = old[0][len('factory-*'):]
+    name = 'factory-' + SCOPE + '-r-*' + suffix
+    names = 'route53:ChangeResourceRecordSetsNormalizedRecordNames'
+    core = next(s for s in baseline['Statement'] if s.get('Sid') == 'DenyCoreNamesAndReservedSubtrees')
+    if (core.get('Effect') != 'Deny' or core.get('Action') != 'route53:ChangeResourceRecordSets'
+            or core.get('Resource') != original['Resource'] or not core.get('Condition', {}).get('ForAnyValue:StringLike')):
+        raise ValueError('Expected original explicit core-record denial')
+    change = statement('route53:ChangeResourceRecordSets', original['Resource'], {
+        'ForAllValues:StringLike': {names: [name, '*.' + name]},
+        'Null': {names: 'false'}})
+    reads = statement(['route53:GetHostedZone', 'route53:ListResourceRecordSets', 'route53:GetChange'],
+                      [original['Resource'], 'arn:aws:route53:::change/*'])
+    return [reads, change, copy.deepcopy(core)]
+
+
+def delegation_guards(account, protected):
+    prefix = 'factory-' + SCOPE + '-r-*'
+    scoped = [f'arn:aws:{service}:*:{account}:*/{prefix}' for service in ('cloudformation', 'ecs', 'codebuild', 'ssm')] + [
+              f'arn:aws:lambda:*:{account}:function:{prefix}',
+              f'arn:aws:states:*:{account}:stateMachine:{prefix}',
+              f'arn:aws:states:*:{account}:execution:{prefix}:*']
+    operations = ['cloudformation:*teStack*', 'cloudformation:*ChangeSet', 'cloudformation:*Rollback*', 'cloudformation:Cancel*', 'cloudformation:Set*', 'cloudformation:Signal*',
+        'ecs:Create*', 'ecs:Update*', 'ecs:Delete*', 'ecs:Register*', 'ecs:Deregister*',
+        'ecs:Put*', 'ecs:RunTask', 'ecs:StartTask', 'ecs:Stop*', 'ecs:ExecuteCommand',
+        'lambda:*Function', 'lambda:UpdateFunction*', 'lambda:InvokeFunction*',
+        'lambda:*Permission', 'lambda:PublishVersion', 'lambda:*Alias', 'lambda:PutFunction*',
+        'codebuild:Create*', 'codebuild:Update*', 'codebuild:Start*', 'codebuild:Retry*', 'codebuild:Delete*',
+        'states:*teStateMachine*', 'states:*Execution',
+        'ssm:*teDocument*', 'ssm:ModifyDocumentPermission', 'ssm:StartAutomationExecution']
+    def deny(actions, condition=None, resources='*', **extra):
+        item = statement(actions, resources, condition, effect='Deny', **extra)
+        if 'NotResource' in item:
+            item.pop('Resource')
+        return item
+    result = [deny(operations, NotResource=scoped),
+        deny('autoscaling:*', {'Bool': {'autoscaling:LaunchTemplateVersionSpecified': 'false'}}),
+        deny('lambda:*ateEventSourceMapping',
+             {'ArnNotLike': {'lambda:FunctionArn': f'arn:aws:lambda:*:{account}:function:{prefix}'}}),
+        deny(['ecs:RunTask', 'ecs:StartTask', 'ecs:*Service', 'ecs:*TaskSet'], {'ArnNotLike': {'ecs:cluster': f'arn:aws:ecs:*:{account}:cluster/{prefix}'}}),
+        deny(['ssm:SendCommand', 'ssm:StartSession'], {'StringNotEquals': {'ssm:resourceTag/factory:s': SCOPE}},
+             [f'arn:aws:ec2:*:{account}:instance/*', f'arn:aws:ssm:*:{account}:managed-instance/*']),
+        deny(['servicecatalog:ProvisionProduct', 'servicecatalog:CreateConstraint'],
+             {'StringNotEquals': {'aws:ResourceTag/factory:s': SCOPE}}, f'arn:aws:catalog:*:{account}:product/*'),
+        deny('sts:*'),
+        deny(['autoscaling:StartInstanceRefresh', 'cloudformation:*OrganizationsAccess', 'servicecatalog:*OrganizationsAccess',
+              'servicecatalog:UpdateConstraint', 'servicecatalog:UpdateProvisionedProduct',
+              'servicecatalog:ExecuteProvisionedProduct*',
+              'ssm:CreateAssociation*', 'ssm:UpdateAssociation', 'ssm:StartAssociationsOnce',
+              'ssm:RegisterTaskWithMaintenanceWindow', 'ssm:UpdateMaintenanceWindowTask'])]
+    if protected:
+        result.append(deny('*', resources=protected))
+    return result
+
+
+def strip_sids(policy):
+    """Coalesce only identical envelopes: their Action alternatives are an exact union."""
+    result = copy.deepcopy(policy)
+    grouped = {}
+    statements = []
+    for item in result['Statement']:
+        item.pop('Sid', None)
+        for key in ('Action', 'NotAction', 'Resource', 'NotResource'):
+            if isinstance(item.get(key), list) and len(item[key]) == 1:
+                item[key] = item[key][0]
+        if 'Action' not in item:
+            statements.append(item)
+            continue
+        signature = json.dumps({k: v for k, v in item.items() if k != 'Action'}, sort_keys=True)
+        if signature not in grouped:
+            grouped[signature] = item
+            statements.append(item)
+            continue
+        previous = grouped[signature]
+        actions = previous['Action'] if isinstance(previous['Action'], list) else [previous['Action']]
+        extra = item['Action'] if isinstance(item['Action'], list) else [item['Action']]
+        previous['Action'] = list(dict.fromkeys(actions + extra))
+    result['Statement'] = statements
+    return result
 
 
 def render(config, baseline, boundary, bootstrap, trust):
@@ -68,129 +180,41 @@ def render(config, baseline, boundary, bootstrap, trust):
         raise ValueError('Invalid role or user name')
     names = [config[key] for key in ('app_boundary_name', 'app_policy_name')]
     if not all(re.fullmatch(r'EngineeringFactory[A-Za-z0-9-]+', name) for name in names) or names[0] == names[1]:
-        raise ValueError('Distinct dedicated managed policy names are required')
+        raise ValueError('Distinct fixed managed policy names are required')
+    count, limit = config['runner_managed_policy_count'], config['runner_managed_policy_limit']
+    if type(count) is not int or type(limit) is not int or not 0 <= count < limit <= 25:
+        raise ValueError('Provide observed runner attachment count and quota with capacity for one policy')
+    protected = protected_resources(config)
     arn = 'arn:aws:'
     role_arn = f'{arn}iam::{account}:role/{role}'
-    app_role = f'{arn}iam::{account}:role/factory/{PROJECT}/{ENVIRONMENT}/*'
+    app_role = f'{arn}iam::{account}:role/factory/{SCOPE}/*'
     app_boundary, app_policy = [f'{arn}iam::{account}:policy/{name}' for name in names]
-    prefix = 'factory-' + PROJECT + '-' + ENVIRONMENT + '-*'
-    resources = {
-        'lambda': [f'{arn}lambda:*:{account}:function:{prefix}'],
-        'dynamodb': [f'{arn}dynamodb:*:{account}:table/{prefix}'],
-        'sqs': [f'{arn}sqs:*:{account}:{prefix}'],
-        'sns': [f'{arn}sns:*:{account}:{prefix}'],
-        'secretsmanager': [f'{arn}secretsmanager:*:{account}:secret:{prefix}'],
-        'logs': [f'{arn}logs:*:{account}:log-group:{prefix}', f'{arn}logs:*:{account}:log-group:/aws/lambda/{prefix}'],
-    }
-    buckets = [f'{arn}s3:::factory-{PROJECT}-{ENVIRONMENT}-*']
-    objects = [buckets[0] + '/*']
-    creates = {
-        'lambda': ['CreateFunction', 'TagResource'],
-        'dynamodb': ['CreateTable', 'TagResource'],
-        'sqs': ['CreateQueue', 'TagQueue'],
-        'sns': ['CreateTopic', 'TagResource'],
-        'secretsmanager': ['CreateSecret', 'TagResource'],
-        'logs': ['CreateLogGroup', 'TagResource', 'TagLogGroup'],
-    }
-    actions = {
-        'lambda': ['GetFunction', 'GetFunctionConfiguration', 'GetFunctionCodeSigningConfig', 'GetFunctionConcurrency',
-                   'GetFunctionUrlConfig', 'GetPolicy', 'ListTags', 'ListVersionsByFunction', 'ListAliases',
-                   'UpdateFunctionCode', 'UpdateFunctionConfiguration', 'DeleteFunction', 'InvokeFunction',
-                   'PublishVersion', 'CreateAlias', 'UpdateAlias', 'DeleteAlias', 'GetAlias',
-                   'PutFunctionConcurrency', 'DeleteFunctionConcurrency', 'CreateFunctionUrlConfig',
-                   'UpdateFunctionUrlConfig', 'DeleteFunctionUrlConfig', 'AddPermission', 'RemovePermission'],
-        'dynamodb': ['DescribeTable', 'DescribeTimeToLive', 'DescribeContinuousBackups', 'ListTagsOfResource',
-                     'UpdateTable', 'DeleteTable', 'UpdateTimeToLive', 'UpdateContinuousBackups',
-                     'GetItem', 'PutItem', 'UpdateItem', 'DeleteItem', 'Query', 'Scan', 'BatchGetItem', 'BatchWriteItem',
-                     'ConditionCheckItem', 'DescribeStream', 'GetRecords', 'GetShardIterator'],
-        'sqs': ['GetQueueUrl', 'GetQueueAttributes', 'ListQueueTags', 'SetQueueAttributes', 'DeleteQueue', 'PurgeQueue',
-                'SendMessage', 'ReceiveMessage', 'DeleteMessage', 'ChangeMessageVisibility'],
-        'sns': ['GetTopicAttributes', 'ListTagsForResource', 'SetTopicAttributes', 'DeleteTopic', 'Publish',
-                'Subscribe', 'ListSubscriptionsByTopic'],
-        'secretsmanager': ['DescribeSecret', 'GetSecretValue', 'ListSecretVersionIds', 'PutSecretValue',
-                           'UpdateSecret', 'UpdateSecretVersionStage', 'DeleteSecret', 'RestoreSecret'],
-        'logs': ['DescribeLogStreams', 'FilterLogEvents', 'ListTagsForResource',
-                 'ListTagsLogGroup', 'PutRetentionPolicy', 'DeleteRetentionPolicy', 'DeleteLogGroup'],
-    }
-    grants = []
-    for service, create_actions in creates.items():
-        grants.append(statement([service + ':' + a for a in create_actions], resources[service], creation()))
-        target = resources[service]
-        grants.append(statement([service + ':' + a for a in actions[service]], target, owned()))
-    # S3 bucket tags require ABAC enablement before ResourceTag works.
-    # A UUID/environment namespace and fixed resource account enforce bootstrap isolation.
-    s3_context = context()
-    s3_context['StringEquals']['s3:ResourceAccount'] = account
-    grants += [statement(['s3:CreateBucket', 's3:TagResource'], buckets, creation()),
-               statement(['s3:GetBucketLocation', 's3:ListBucket', 's3:GetBucketTagging', 's3:ListTagsForResource',
-                          's3:GetBucketAbac', 's3:PutBucketAbac', 's3:GetBucketVersioning', 's3:PutBucketVersioning',
-                          's3:GetEncryptionConfiguration', 's3:PutEncryptionConfiguration',
-                          's3:GetBucketPublicAccessBlock', 's3:PutBucketPublicAccessBlock',
-                          's3:GetLifecycleConfiguration', 's3:PutLifecycleConfiguration',
-                          's3:ListBucketMultipartUploads', 's3:DeleteBucket'], buckets, s3_context),
-               statement(['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:GetObjectVersion', 's3:DeleteObjectVersion',
-                          's3:AbortMultipartUpload', 's3:ListMultipartUploadParts'], objects, s3_context)]
-    # Child streams have no independent provenance tags; their parent namespace is mandatory.
-    streams = [r + ':log-stream:*' for r in resources['logs']]
-    grants.append(statement(['logs:CreateLogStream', 'logs:PutLogEvents', 'logs:DeleteLogStream',
-                             'logs:GetLogEvents'], streams, context()))
-    tag_actions = ['lambda:TagResource', 'dynamodb:TagResource', 'sqs:TagQueue', 'sns:TagResource',
-                   'secretsmanager:TagResource', 'logs:TagResource', 'logs:TagLogGroup', 'iam:TagRole', 's3:TagResource']
-    tag_resources = sum(resources.values(), []) + buckets + [app_role]
-    latest = owned()
-    latest['ForAllValues:StringEquals'] = {'aws:TagKeys': ['factory:last-run-id', 'factory:last-source-commit', 'factory:expires-at']}
-    latest['Null']['aws:TagKeys'] = 'false'
-    grants.append(statement(tag_actions, tag_resources, latest))
-    # Original provenance may be restated unchanged, never silently rewritten or removed.
-    for key in ORIGINAL_TAGS:
-        grants.append(statement(tag_actions, '*', {
-            'Null': {'aws:ResourceTag/' + key: 'false', 'aws:RequestTag/' + key: 'false'},
-            'StringNotEquals': {'aws:RequestTag/' + key: '${aws:ResourceTag/' + key + '}'},
-        }, effect='Deny'))
-    grants.append(statement(['lambda:UntagResource', 'dynamodb:UntagResource', 'sqs:UntagQueue', 'sns:UntagResource',
-                             'secretsmanager:UntagResource', 'logs:UntagResource', 'logs:UntagLogGroup',
-                             'iam:UntagRole', 's3:UntagResource', 's3:PutBucketTagging'], '*', effect='Deny'))
-    create_role = creation()
-    create_role['StringEquals']['iam:PermissionsBoundary'] = app_boundary
-    grants.append(statement('iam:CreateRole', [app_role], create_role))
-    grants.append(statement('iam:TagRole', [app_role], creation()))
-    grants.append(statement(['iam:GetRole', 'iam:ListRolePolicies', 'iam:ListAttachedRolePolicies', 'iam:ListRoleTags',
-                             'iam:DeleteRole'], [app_role], owned()))
-    grants.append(statement(['iam:AttachRolePolicy', 'iam:DetachRolePolicy'], [app_role], {
-        **owned(), 'ArnEquals': {'iam:PolicyARN': app_policy}}))
-    grants.append(statement('iam:PassRole', [app_role], {
-        **context(), 'StringEquals': {'aws:PrincipalTag/factory:managed-by': 'engineering-factory',
-                                     'iam:PassedToService': 'lambda.amazonaws.com'}}))
-    # No unrestricted service discovery reads. Exact names/ARNs are kept in private inventory.
-    grants.append(statement(['sts:GetCallerIdentity'], '*'))
-    # Split identity policies so no managed document exceeds AWS's 6144-character quota.
-    chunks, current = [], []
-    for item in grants:
-        if len(json.dumps(document(current + [item]), separators=(',', ':'))) > 6000 and current:
-            chunks.append(document(current)); current = []
-        current.append(item)
-    chunks.append(document(current))
-    new_boundary = copy.deepcopy(boundary)
-    admin = [s for s in new_boundary['Statement'] if s.get('Sid') == 'DenyAccountAndIdentityAdministration']
-    if len(admin) != 1 or 'iam:*' not in admin[0]['Action']:
-        raise ValueError('Expected existing explicit account/IAM boundary guard')
-    admin[0]['Action'].remove('iam:*')
-    approved_iam = ['iam:CreateRole', 'iam:TagRole', 'iam:GetRole', 'iam:ListRolePolicies', 'iam:ListAttachedRolePolicies',
-                    'iam:ListRoleTags', 'iam:DeleteRole', 'iam:AttachRolePolicy', 'iam:DetachRolePolicy', 'iam:PassRole']
-    broad = next(s for s in new_boundary['Statement'] if s.get('Effect') == 'Allow' and 'NotAction' in s)
-    broad['NotAction'].append('iam:*')
-    new_boundary['Statement'] += [
-        statement([a for a in approved_iam if a != 'iam:PassRole'], [app_role], context()),
-        statement('iam:PassRole', [app_role], {'StringEquals': {'iam:PassedToService': 'lambda.amazonaws.com',
-                                                             'aws:PrincipalTag/factory:managed-by': 'engineering-factory'}}),
-        {'Effect': 'Deny', 'Action': 'iam:*', 'NotResource': app_role},
-        {'Effect': 'Deny', 'NotAction': approved_iam, 'Resource': app_role},
-    ]
-    # SIDs are diagnostic labels, not semantics. Remove to stay below the boundary quota.
-    for item in new_boundary['Statement']:
-        item.pop('Sid', None)
-    if len(json.dumps(new_boundary, separators=(',', ':'))) > 6144:
-        raise ValueError('Boundary exceeds AWS managed policy quota')
+    admin = [s for s in boundary['Statement'] if s.get('Sid') == 'DenyAccountAndIdentityAdministration']
+    if len(admin) != 1 or admin[0].get('Effect') != 'Deny' or not set(ADMIN_ACTIONS).issubset(admin[0].get('Action', [])):
+        raise ValueError('Expected explicit account/IAM boundary guard')
+    admin = copy.deepcopy(admin[0])
+    admin['Action'].remove('iam:*')
+    dns = dns_permissions(baseline)
+    guards = delegation_guards(account, protected)
+    broad = {'Effect': 'Allow', 'NotAction': ['route53:*', 'route53domains:*'], 'Resource': '*', 'Condition': context()}
+    allows = [broad, *dns]
+    iam_guards = iam_envelope(app_role, app_boundary)
+    # Resource vendors are literal and disjoint: the union cannot make an IAM ARN
+    # exempt an engine action, or make an engine ARN exempt an IAM action.
+    namespace = {'Effect': 'Deny', 'Action': ['iam:*'] + guards[0]['Action'],
+                 'NotResource': iam_guards[0]['NotResource'] + guards[0]['NotResource']}
+    iam_guards = iam_guards[1:]
+    guards = [namespace] + guards[1:]
+    # Default values keep the negative comparison valid even when canonical tags are absent.
+    # Missing scope also makes StringNotEquals true, so this is an explicit fail-closed deny.
+    relation = statement('*', '*', {'StringNotEquals': {'aws:PrincipalTag/factory:s':
+        "${aws:PrincipalTag/factory:project-id, '/'}-${aws:PrincipalTag/factory:environment, '/'}"}}, effect='Deny')
+    allows[0]['Condition'] = {'StringLike': {'aws:PrincipalTag/factory:project-id': '????????-????-????-????-????????????'}}
+    transport = [s for s in baseline['Statement'] if s.get('Sid') == 'DenyInsecureTransport']
+    expiry = [s for s in baseline['Statement'] if s.get('Sid') == 'DenyAfterExpiry']
+    if len(transport) != 1 or len(expiry) != 1:
+        raise ValueError('Expected original TLS and provisioning expiry protections')
+    new_boundary = document([*allows, relation, admin, *iam_guards, *guards, *transport, *expiry])
     required_bootstrap = ('AssumeFactoryRunnerOnly', 'DenyDirectAwsUse', 'DenyOtherRoles')
     for sid in required_bootstrap:
         if sum(s.get('Sid') == sid for s in bootstrap.get('Statement', [])) != 1:
@@ -214,12 +238,12 @@ def render(config, baseline, boundary, bootstrap, trust):
     assume = next(s for s in new_bootstrap['Statement'] if s.get('Sid') == 'AssumeFactoryRunnerOnly')
     if assume['Resource'] != role_arn:
         raise ValueError('Unexpected bootstrap runner target')
-    merge_conditions(tag_condition, assume['Condition'])
+    merge_conditions(tag_condition, tag_session_conditions(assume['Condition']))
     new_bootstrap['Statement'].append(statement('sts:TagSession', role_arn, tag_condition))
     # Prevent wildcard/path substitution into project-namespaced Resource ARNs.
     for key in ('project-id', 'environment'):
         new_bootstrap['Statement'].append(statement('sts:TagSession', role_arn, {
-            'StringLike': {'aws:RequestTag/factory:' + key: ['*${*}*', '*${?}*', '*/*', '*:*', '*${$}*', '*\\*']}
+            'StringLike': {'aws:RequestTag/factory:' + key: ['*${*}*', '*${?}*', '*/*', '*:*', '*${$}*', '*\\*', '*--*', '*-', 'r', 'r-*', '*-r', '*-r-*']}
         }, effect='Deny'))
     for item in new_bootstrap['Statement']:
         item.pop('Sid', None)
@@ -237,36 +261,49 @@ def render(config, baseline, boundary, bootstrap, trust):
     tagged_trust = copy.deepcopy(base)
     tagged_trust['Sid'] = 'TrustBootstrapProjectTags'
     tagged_trust['Action'] = 'sts:TagSession'
+    tagged_trust['Condition'] = tag_session_conditions(tagged_trust['Condition'])
     session_condition = creation_session_condition()
     # Exact bootstrap identity enforces the UUID-shaped value and excludes ARN metacharacters.
     # Trust policies reject wildcard-only project values in an Allow, so retain required keys here.
     session_condition.pop('StringLike')
     merge_conditions(tagged_trust['Condition'], session_condition)
     new_trust['Statement'].append(tagged_trust)
-    data_actions = {
-        'dynamodb': ['GetItem', 'PutItem', 'UpdateItem', 'DeleteItem', 'Query', 'Scan', 'BatchGetItem', 'BatchWriteItem', 'ConditionCheckItem', 'DescribeTable'],
-        'sqs': ['GetQueueUrl', 'GetQueueAttributes', 'SendMessage', 'ReceiveMessage', 'DeleteMessage', 'ChangeMessageVisibility'],
-        'sns': ['Publish'], 'secretsmanager': ['GetSecretValue', 'DescribeSecret'],
-        'lambda': ['InvokeFunction'],
-    }
-    execution = [statement(['sts:GetCallerIdentity'], '*')]
-    execution.append(statement([service + ':' + action for service, permitted in data_actions.items() for action in permitted],
-                               [resource for service in data_actions for resource in resources[service]], owned()))
-    execution += [statement(['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'], buckets, s3_context),
-                  statement(['logs:CreateLogStream', 'logs:PutLogEvents'], streams, context())]
-    # Role-session tags cannot silently redirect execution to a different project or environment.
-    # PrincipalArn is the immutable IAM role ARN for assumed-role sessions, not a caller-supplied tag.
-    for item in execution:
-        if item['Resource'] != '*':
-            item['Condition']['ArnLike'] = {'aws:PrincipalArn': app_role}
-    execution_guards = [statement('*', '*', {
-        'StringLike': {'aws:PrincipalTag/factory:' + key: ['*${*}*', '*${?}*', '*/*', '*:*', '*${$}*', '*\\*']}
-    }, effect='Deny') for key in ('project-id', 'environment')]
-    execution_boundary = document(copy.deepcopy(execution) + execution_guards)
-    result = {'runner-boundary.json': new_boundary, 'runner-dns-baseline.json': copy.deepcopy(baseline),
-              'bootstrap-policy.json': new_bootstrap, 'runner-trust.json': new_trust,
-              'app-execution-boundary.json': execution_boundary, 'app-execution-policy.json': document(execution)}
-    result.update({f'runner-app-{i + 1}.json': policy for i, policy in enumerate(chunks)})
+    app_guard = statement('*', '*', {'ArnNotLike': {'aws:PrincipalArn': app_role}}, effect='Deny')
+    metachar = [statement('*', '*', {'StringLike': {'aws:PrincipalTag/factory:' + key:
+        ['*${*}*', '*${?}*', '*--*', '*-r', '*-r-*']}}, effect='Deny') for key in ('s',)]
+    deployed_allows = copy.deepcopy(allows)
+    deployed_allows[0].pop('Condition')
+    deployed = document([*deployed_allows, relation, admin, *iam_guards, *guards, *transport, app_guard, *metachar])
+    identity_broad = copy.deepcopy(broad)
+    identity_broad['Condition'] = context()
+    identity_broad['NotAction'] += ['iam:CreateRole', 'iam:CreateInstanceProfile', 'iam:CreatePolicy']
+    create_paths = [app_role.replace(':role/', ':' + kind + '/') for kind in ('role', 'instance-profile', 'policy')]
+    identity = document([identity_broad, *[s for s in dns if s['Effect'] == 'Allow'],
+        statement(['iam:CreateRole', 'iam:CreateInstanceProfile', 'iam:CreatePolicy'], create_paths, creation())])
+    result = {'runner-boundary.json': strip_sids(new_boundary), 'runner-dns-baseline.json': copy.deepcopy(baseline),
+        'runner-dns-policy.json': document([*dns, *transport, *expiry]),
+        'bootstrap-policy.json': new_bootstrap, 'runner-trust.json': new_trust,
+        'app-execution-boundary.json': strip_sids(deployed), 'app-execution-policy.json': strip_sids(identity),
+        'runner-app-1.json': strip_sids(identity)}
+    for name, policy in result.items():
+        for item in policy['Statement']:
+            for field in ('Resource', 'NotResource'):
+                values = item.get(field, [])
+                for value in values if isinstance(values, list) else [values]:
+                    if value != '*' and (not value.startswith('arn:aws:') or not re.fullmatch(r'[a-z0-9-]+', value.split(':')[2])):
+                        raise ValueError('Resource ARN vendors must be literal, not wildcard expressions')
+        maximum = 2048 if name == 'bootstrap-policy.json' else 6144
+        if len(compact(policy)) > maximum:
+            raise ValueError('Rendered policy exceeds its quota; never drop protections to fit: ' + name)
+    return result
+
+def tag_session_conditions(conditions):
+    """RoleSessionName applies to AssumeRole, not its separate TagSession authorization."""
+    result = copy.deepcopy(conditions)
+    for operator in list(result):
+        result[operator].pop('sts:RoleSessionName', None)
+        if not result[operator]:
+            del result[operator]
     return result
 
 
@@ -276,12 +313,13 @@ def merge_conditions(target, source):
 
 
 def creation_session_condition():
-    return {'StringEquals': {'aws:RequestTag/factory:managed-by': 'engineering-factory'},
+    return {'StringEquals': {'aws:RequestTag/factory:managed-by': 'engineering-factory',
+                'aws:RequestTag/factory:s': '${aws:RequestTag/factory:project-id}-${aws:RequestTag/factory:environment}'},
             'StringLike': {'aws:RequestTag/factory:project-id': '????????-????-????-????-????????????',
                            'aws:RequestTag/factory:environment': '?*'},
-            'ForAllValues:StringEquals': {'aws:TagKeys': ['factory:managed-by', 'factory:project-id', 'factory:environment']},
-            'Null': {key: 'false' for key in ('aws:RequestTag/factory:managed-by', 'aws:RequestTag/factory:project-id',
-                                             'aws:RequestTag/factory:environment', 'aws:TagKeys')}}
+            'ForAllValues:StringEquals': {'aws:TagKeys': ['factory:managed-by', 'factory:project-id', 'factory:environment', 'factory:s']},
+            'Null': {'aws:TagKeys': 'false'}}
+
 
 
 def main():
@@ -289,17 +327,30 @@ def main():
     for key in ('config', 'baseline', 'boundary', 'bootstrap', 'trust', 'output'):
         parser.add_argument('--' + key, required=True, type=Path)
     args = parser.parse_args()
+    inputs = {key: getattr(args, key) for key in ('config', 'baseline', 'boundary', 'bootstrap', 'trust')}
+    data = {key: read_json(value) for key, value in inputs.items()}
+    result = render(*(data[key] for key in inputs))
     args.output.mkdir(mode=0o700, parents=False, exist_ok=False)
-    if args.output.stat().st_mode & 0o077:
-        raise ValueError('Output must be private')
-    result = render(*(read_json(getattr(args, key)) for key in ('config', 'baseline', 'boundary', 'bootstrap', 'trust')))
     for name, policy in result.items():
-        target = args.output / name
-        with target.open('x') as stream:
-            target.chmod(0o600)
-            stream.write(json.dumps(policy, indent=2) + '\n')
-    print('Rendered private policies. No AWS changes made. Validate and simulate before administrator apply.')
+        with os.fdopen(os.open(args.output / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
+            stream.write(compact(policy) + b'\n')
+    review = dict(schema=2, renderer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        input_sha256={key: hashlib.sha256(value.read_bytes()).hexdigest() for key, value in inputs.items()},
+        policies={name: dict(chars=len(compact(policy)), sha256=hashlib.sha256(compact(policy)+b'\n').hexdigest()) for name, policy in result.items()},
+        runner_managed_policy_count=data['config']['runner_managed_policy_count'],
+        runner_managed_policy_limit=data['config']['runner_managed_policy_limit'], planned_new_runner_attachments=1,
+        activation_gates=['live policy/trust comparison', 'complete proposed policy-set validation/simulation',
+            'protected and delegated-resource inventory coverage review', 'actual STS/service-context checks',
+            'default policy versions, attachments and boundary readback'],
+        scope='General cross-service application access; no universal new-resources-only or all-service ABAC guarantee')
+    with os.fdopen(os.open(args.output / 'review-manifest.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'w') as stream:
+        json.dump(review, stream, sort_keys=True)
+        stream.write('\n')
+    print('Rendered private general application policies. No AWS changes made; administrator activation gates remain.')
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except (OSError, ValueError, KeyError, TypeError):
+        raise SystemExit('Policy preparation failed; inspect private inputs/quotas without exposing their values.') from None

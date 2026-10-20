@@ -1,7 +1,10 @@
 """Bounded provider transport and diagnostics; raw responses never become errors."""
+import errno
 import json
 import os
 import re
+import socket
+import ssl
 import subprocess
 import urllib.error
 import urllib.request
@@ -20,15 +23,25 @@ class ProviderError(Exception):
 # Never echo arbitrary provider messages, codes, headers, URLs, or exception text.
 CODES = {"forbidden", "unauthorized", "bad_request", "invalid_request", "invalid_target",
          "invalid_engines_value", "not_found", "rate_limited", "deployment_not_found"}
+TRANSPORT_REASONS = (
+    ("[errno 1]", "OS denied network or process access; HTTP unconfirmed"),
+    ("[errno 13]", "OS denied network or process access; HTTP unconfirmed"),
+    ("socket: operation not permitted", "OS denied network or process access; HTTP unconfirmed"),
+    ("connect: operation not permitted", "OS denied network or process access; HTTP unconfirmed"),
+    ("socket: permission denied", "OS denied network or process access; HTTP unconfirmed"),
+    ("connect: permission denied", "OS denied network or process access; HTTP unconfirmed"),
+    ("network is unreachable", "network unreachable; HTTP unconfirmed"),
+    ("connection timed out", "connection timeout; HTTP unconfirmed"),
+    ("could not resolve host", "Git host resolution failed"),
+    ("ssl certificate problem", "Git TLS certificate verification failed"),
+    ("tls connection", "Git TLS connection failed"),
+    ("failed to connect", "Git connection failed"),
+)
 REASONS = (
     ("resource not accessible by personal access token", "token cannot access this resource"),
     ("resource not accessible by integration", "integration cannot access this resource"),
     ("authentication failed", "Git credentials rejected"),
     ("repository not found", "repository absent or inaccessible"),
-    ("could not resolve host", "Git host resolution failed"),
-    ("ssl certificate problem", "Git TLS certificate verification failed"),
-    ("tls connection", "Git TLS connection failed"),
-    ("failed to connect", "Git connection failed"),
     ("bad credentials", "credentials rejected"),
     ("requires authentication", "authentication required"),
     ("ebadengine", "unsupported package engines configuration"),
@@ -37,6 +50,25 @@ REASONS = (
     ("rate limit", "provider rate limit"),
     ("validation failed", "request validation failed"),
 )
+
+
+def transport_reason(error):
+    """Classify exception types/errno; never expose exception text or request data."""
+    if isinstance(error, urllib.error.URLError):
+        error = error.reason
+    if isinstance(error, OSError) and error.errno in (errno.EPERM, errno.EACCES):
+        return "os_permission_denied"
+    if isinstance(error, (TimeoutError, subprocess.TimeoutExpired)):
+        return "timeout"
+    if isinstance(error, socket.gaierror):
+        return "dns_failure"
+    if isinstance(error, ssl.SSLError):
+        return "tls_failure"
+    if "tunnel connection failed" in str(error).lower():
+        return "proxy_tunnel_failure"
+    if isinstance(error, OSError) and error.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ECONNREFUSED, errno.ECONNRESET):
+        return "connection_failure"
+    return "transport_or_response_failure"
 
 
 def diagnostic(provider, status=None, headers=None, body=b"", stderr=b""):
@@ -63,7 +95,9 @@ def diagnostic(provider, status=None, headers=None, body=b"", stderr=b""):
         match = re.search(r"\bHTTP[ /](\d{3})\b", stderr, re.IGNORECASE)
         if match:
             status = int(match[1])
-    reason = next((safe for fragment, safe in REASONS if fragment in text), "provider detail withheld")
+    reason = next((safe for fragment, safe in TRANSPORT_REASONS if status is None and fragment in stderr.lower()), None)
+    if reason is None:
+        reason = next((safe for fragment, safe in REASONS if fragment in text), "provider detail withheld")
     fields = [provider, "HTTP " + str(status) if isinstance(status, int) and 100 <= status <= 599 else "status unknown"]
     if code:
         fields.append("code=" + code)
@@ -106,8 +140,8 @@ def gh(args, payload=None, include=False):
     try:
         result = subprocess.run(command + args, input=None if payload is None else json.dumps(payload).encode(),
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, timeout=120)
-    except (OSError, subprocess.TimeoutExpired):
-        raise ProviderError("GitHub; transport failure; outcome may be unknown") from None
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ProviderError("GitHub; " + transport_reason(error) + "; HTTP unconfirmed; outcome may be unknown") from None
     data, status, headers = result.stdout, None, {}
     if include:
         # --include is used for a single creation request, never paginated output.
@@ -158,8 +192,8 @@ class Vercel:
                 return data
         except urllib.error.HTTPError as error:
             raise ProviderError(diagnostic("Vercel", error.code, error.headers, error.read(65536))) from None
-        except (OSError, ValueError, urllib.error.URLError):
-            raise ProviderError("Vercel; transport or response failure; reconcile before retry") from None
+        except (OSError, ValueError, urllib.error.URLError) as error:
+            raise ProviderError("Vercel; " + transport_reason(error) + "; HTTP unconfirmed; reconcile before retry") from None
 
 
 def gh_clone(target, path):
@@ -167,7 +201,7 @@ def gh_clone(target, path):
     try:
         result = subprocess.run(["gh", "repo", "clone", target, path], env=env,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120)
-    except (OSError, subprocess.TimeoutExpired):
-        raise ProviderError("GitHub clone; transport failure; inspect retained remote repository before retry") from None
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ProviderError("GitHub clone; " + transport_reason(error) + "; HTTP unconfirmed; inspect retained remote repository before retry") from None
     if result.returncode:
         raise ProviderError(diagnostic("GitHub", stderr=result.stderr))

@@ -150,6 +150,10 @@ def git_command(tools, env, args, target):
 def execute(args):
     tools = load()
     target = args.repo.lower()
+    contextual = os.environ.get('FACTORY_PROJECT_REPOSITORY', '') == target
+    if contextual:
+        from context import preflight
+        preflight(tools)
     require(re.fullmatch(r'[a-z0-9][a-z0-9-]{0,38}/[a-z0-9][a-z0-9_.-]{0,99}', target)
             and target.split('/')[0] == os.environ.get('FACTORY_GITHUB_OWNER', '').lower(), 'GitHub target differs from approved owner/repository')
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
@@ -169,7 +173,7 @@ def execute(args):
             repository(tools, env, target, args.visibility)
             executable, payload = git_command(tools, env, args, target)
         require(not any(token and token.encode() in (payload or b'') for token in tokens), 'Factory credential in request body rejected')
-        operation = Operation(args.record, args.output, 'GitHub', json.dumps(executable).encode() + (payload or b''))
+        operation = Operation(args.record, args.output, 'GitHub', json.dumps(executable).encode() + (payload or b''), contextual=contextual)
         try:
             event(operation.record, 'identity-verified', principal=user, repository=target, visibility=args.visibility)
             response = run(executable, env, 'GitHub', input=payload, timeout=900)

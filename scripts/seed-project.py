@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed three instruction files in a verified independent clone; local Git reads only."""
+"""Seed verified app instructions; optionally initialize the selected private context backend."""
 import argparse
 import os
 from pathlib import Path
@@ -86,6 +86,14 @@ def contents(target, origin):
     return result
 
 
+def continue_context(path, target):
+    if os.environ.get("FACTORY_CONTEXT_REPOSITORY"):
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/runtime/project.py"), "init", "--repo", target,
+                                 "--app", str(path), "--environment", os.environ.get("FACTORY_ENVIRONMENT", "development")],
+                                timeout=300)
+        require(result.returncode == 0, "Instructions preserved; private context initialization pending. Reconcile before provider work")
+
+
 def seed(path, expected, confirmation, dry_run=False):
     target = repository(expected)
     require(dry_run or confirmation.lower() == target, "Seeding requires matching --confirm OWNER/REPO")
@@ -107,6 +115,7 @@ def seed(path, expected, confirmation, dry_run=False):
         print("PLAN ONLY: verified app/source and instruction collisions; no writes or network calls.")
         return
     if not missing:
+        continue_context(path, target)
         print("Instruction seed already matches; no files changed.")
         return
     created = []
@@ -129,6 +138,7 @@ def seed(path, expected, confirmation, dry_run=False):
             if not output.is_symlink() and output.is_file() and output.stat().st_ino == inode and output.read_bytes() == content:
                 output.unlink()
         raise SeedError("Instruction write interrupted; existing user files preserved") from None
+    continue_context(path, target)
     print("Instruction seed ready; identical existing files preserved. App implementation/CI/deployment remain app-owned.")
 
 

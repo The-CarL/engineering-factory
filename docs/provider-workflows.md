@@ -42,6 +42,8 @@ The selector controls the subprocess source; it does not prove Git's HTTPS/crede
 ./scripts/preflight.sh --provider vercel --vercel-transport api
 ```
 
+For a CLI-capable factory, use the explicitly approved personal **Only me** direct secret `VERCEL_TOKEN` environment design in [the credential checklist](credential-checklist.md#add-values-outside-git); approved task code can read its raw value. A REST-only network-secret binding is a separate alternative, not a native CLI solution. No `--token` secret argv, shim or silent transport switch is permitted.
+
 The default remains the native CLI gate. The API gate uses `GET /v2/user` and `GET /v2/teams/ID`, verifies the exact approved team ID/slug and reports REST separately. It sends the existing `VERCEL_TOKEN` binding only to `https://api.vercel.com`; redirects are refused. A project-scoped token may not permit these reads. Stop and review a narrower identity contract instead of broadening the token or silently switching credentials.
 
 ## New Vercel project and initial release
@@ -89,7 +91,7 @@ Client tool pins and remote build tools are different contracts. A provider-cont
 
 ## Workload provider scope
 
-Select services and hosting under [application design](../standards/application-design.md). AWS operations need a service-specific reviewed role/IaC profile, permissions, wrapper/tooling, provenance and workload acceptance. Existing AWS reads do not establish deployment capability. Implement and verify each selected workload through its reviewed provider path.
+Select services and hosting under [application design](../standards/application-design.md). AWS operations use the reviewed general application role profile, workload IaC plan, wrapper/tooling, provenance and workload acceptance. Service selection does not itself require extending a service allowlist; provider-specific authorization limits still require review. Existing AWS reads do not establish deployment capability. Implement and verify each selected workload through its reviewed provider path.
 
 ## Recovery snapshots and deployed acceptance
 
