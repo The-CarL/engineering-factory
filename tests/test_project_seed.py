@@ -26,6 +26,7 @@ class SeedTests(unittest.TestCase):
         (self.factory / "standards").mkdir()
         shutil.copyfile(SOURCE / "scripts/seed-project.py", self.factory / "scripts/seed-project.py")
         shutil.copyfile(SOURCE / "standards/application-design.md", self.factory / "standards/application-design.md")
+        shutil.copyfile(SOURCE / "standards/conversational-delivery.md", self.factory / "standards/conversational-delivery.md")
         shutil.copytree(SOURCE / "templates", self.factory / "templates")
         (self.factory / ".gitignore").write_text("workspaces/\n__pycache__/\n")
         self.initialize(self.factory, "https://github.com/factory-owner/engineering-harness.git")
@@ -142,6 +143,21 @@ class SeedTests(unittest.TestCase):
         template.write_text(template.read_text() + "\nchanged\n")
         self.assertNotEqual(self.run_seed().returncode, 0)
         self.assert_outputs_absent()
+
+    def test_dirty_or_missing_delivery_standard_cannot_claim_committed_guidance(self):
+        standard = self.factory / "standards/conversational-delivery.md"
+        original = standard.read_text()
+        for content in (original + "\nUncommitted delivery change\n", None):
+            with self.subTest(content="missing" if content is None else "modified"):
+                if content is None:
+                    standard.unlink()
+                else:
+                    standard.write_text(content)
+                self.assertNotEqual(self.run_seed().returncode, 0)
+                self.assertNotEqual(self.run_seed("--dry-run").returncode, 0)
+                self.assert_outputs_absent()
+                self.assertEqual((self.app / "existing.txt").read_text(), "preserve user work")
+                standard.write_text(original)
 
     def test_nested_apps_require_ignored_workspace_and_have_no_factory_changes(self):
         for name, accepted in (("app-not-ignored", False), ("workspaces/fixture-owner/app", True)):
