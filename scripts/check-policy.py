@@ -9,7 +9,7 @@ root = Path(__file__).resolve().parent.parent
 required = ["README.md", "AGENTS.md", "LICENSE", ".gitignore", ".env.example",
             ".github/CODEOWNERS", ".github/pull_request_template.md",
             "standards/software-quality.md", "standards/testing.md", "standards/security.md",
-            "standards/infrastructure.md", "standards/deployment.md",
+            "standards/infrastructure.md", "standards/deployment.md", "standards/conversational-delivery.md",
             "docs/architecture.md", "docs/setup.md", "docs/security-model.md",
             "docs/mobile-workflow.md", "docs/credential-checklist.md"]
 errors = [f"Missing required file: {name}" for name in required if not (root / name).is_file()]

@@ -16,6 +16,8 @@ Check the intended repository/build/test/hosting/data path and actual source/run
 
 Use `create-repo.sh` for an authorized new repository or `clone-repo.sh` for an existing one. Private is the default; use the approved visibility and branch workflow. Verify the exact independent Git root and fetch/push origin. Keep app source and provider state out of the factory.
 
+After design agreement, normally create and verify the remote repository before implementation; honor any explicit sequence from the user. Share its canonical URL only after provider readback confirms owner/name and visibility. If creation is blocked, report the observed failure promptly and label any permitted local work accurately. Local initialization and seeded instructions do not establish remote creation or implemented product code. Follow the diagnostic budget, evidence and stop/restart rules in [conversational delivery](../standards/conversational-delivery.md).
+
 The local instruction helper seeds shared rules for Codex and Claude plus an app-owned engineering contract. Run it from reviewed committed factory source using the canonical absolute app path:
 
 ```bash
@@ -27,7 +29,7 @@ python3 scripts/seed-project.py \
   --repo approved-owner/my-app --confirm approved-owner/my-app
 ```
 
-It writes only `AGENTS.md`, `CLAUDE.md` and `ENGINEERING.md`. Local Git checks reject factory targets, linked worktrees, unsafe origins and symlinks; all outputs are checked before writes. Matching repeats are no-ops; differing existing instructions require deliberate integration. The helper/templates/application standard must match a committed factory revision. It generates no app/CI code, executes no hooks and performs no authentication or network calls.
+It writes only `AGENTS.md`, `CLAUDE.md` and `ENGINEERING.md`. Local Git checks reject factory targets, linked worktrees, unsafe origins and symlinks; all outputs are checked before writes. Matching repeats are no-ops; differing existing instructions require deliberate integration. The helper, templates, application standard and conversational-delivery standard must match a committed factory revision. It generates no app/CI code, executes no hooks and performs no authentication or network calls.
 
 ## Implementation, hosting and evidence
 
