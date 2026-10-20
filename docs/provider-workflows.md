@@ -89,7 +89,7 @@ Client tool pins and remote build tools are different contracts. A provider-cont
 
 ## Workload provider scope
 
-Select services and hosting under [application design](../standards/application-design.md). AWS operations need a service-specific reviewed role/IaC profile, permissions, wrapper/tooling, provenance and workload acceptance. Existing AWS reads do not establish deployment capability. Implement and verify each selected workload through its reviewed provider path.
+Select services and hosting under [application design](../standards/application-design.md). AWS operations use the reviewed general application role profile, workload IaC plan, wrapper/tooling, provenance and workload acceptance. Service selection does not itself require extending a service allowlist; provider-specific authorization limits still require review. Existing AWS reads do not establish deployment capability. Implement and verify each selected workload through its reviewed provider path.
 
 ## Recovery snapshots and deployed acceptance
 
