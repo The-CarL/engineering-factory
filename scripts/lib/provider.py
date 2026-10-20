@@ -24,8 +24,12 @@ class ProviderError(Exception):
 CODES = {"forbidden", "unauthorized", "bad_request", "invalid_request", "invalid_target",
          "invalid_engines_value", "not_found", "rate_limited", "deployment_not_found"}
 TRANSPORT_REASONS = (
-    ("operation not permitted", "OS denied network or process access; HTTP unconfirmed"),
-    ("permission denied", "OS denied network or process access; HTTP unconfirmed"),
+    ("[errno 1]", "OS denied network or process access; HTTP unconfirmed"),
+    ("[errno 13]", "OS denied network or process access; HTTP unconfirmed"),
+    ("socket: operation not permitted", "OS denied network or process access; HTTP unconfirmed"),
+    ("connect: operation not permitted", "OS denied network or process access; HTTP unconfirmed"),
+    ("socket: permission denied", "OS denied network or process access; HTTP unconfirmed"),
+    ("connect: permission denied", "OS denied network or process access; HTTP unconfirmed"),
     ("network is unreachable", "network unreachable; HTTP unconfirmed"),
     ("connection timed out", "connection timeout; HTTP unconfirmed"),
     ("could not resolve host", "Git host resolution failed"),

@@ -161,12 +161,15 @@ class DiagnosisTests(unittest.TestCase):
         self.assertNotIn(self.secret, json.dumps(result))
 
     def test_provider_os_denial_is_not_inferred_from_http_forbidden_body(self):
-        denied = provider.diagnostic('GitHub', stderr=('dial tcp: operation not permitted '+self.secret).encode())
+        denied = provider.diagnostic('GitHub', stderr=('dial tcp: socket: operation not permitted '+self.secret).encode())
         self.assertIn('status unknown', denied)
         self.assertIn('OS denied', denied)
         forbidden = provider.diagnostic('GitHub', status=403, body=json.dumps(dict(message='operation not permitted '+self.secret)).encode())
         self.assertIn('HTTP 403', forbidden)
         self.assertNotIn('OS denied', forbidden)
+        ssh_auth = provider.diagnostic('GitHub', stderr=('git@github.com: Permission denied (publickey). '+self.secret).encode())
+        self.assertNotIn('OS denied', ssh_auth)
+        self.assertNotIn(self.secret, ssh_auth)
         self.assertNotIn(self.secret, denied+forbidden)
         with patch.object(provider.subprocess, 'run', side_effect=PermissionError(errno.EPERM, self.secret)):
             with self.assertRaises(provider.ProviderError) as error:
