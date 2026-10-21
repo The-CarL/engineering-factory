@@ -229,6 +229,23 @@ def write_environment(value, tools, project=None):
             values[name] = os.environ[name]
     values.update(project or {})
     text = marker + ''.join('export ' + key + '=' + shlex.quote(value) + '\n' for key, value in sorted(values.items()))
+    if source == 'factory-token':
+        text += '''# Resolve the binding only in the activated shell, never during generation.
+set +x
+unset GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN
+export GH_HOST=github.com GH_PROMPT_DISABLED=1
+case ${FACTORY_GITHUB_TOKEN-} in
+    *[![:space:]]*)
+        export GH_TOKEN="$FACTORY_GITHUB_TOKEN" GITHUB_TOKEN="$FACTORY_GITHUB_TOKEN"
+        ;;
+    *)
+        # Nonempty invalid values also prevent cached gh auth if return is ignored.
+        export GH_TOKEN=factory-token-binding-missing GITHUB_TOKEN=factory-token-binding-missing
+        printf '%s\\n' 'ERROR: FACTORY_GITHUB_TOKEN binding is required for factory-token mode.' >&2
+        return 1
+        ;;
+esac
+'''
     require(not any(secret and secret in text for secret in known_credentials()), 'Credential-like activation content rejected')
     descriptor, temporary = tempfile.mkstemp(prefix='.factory-env-', dir=path.parent)
     try:
