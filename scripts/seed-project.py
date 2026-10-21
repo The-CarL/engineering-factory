@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed verified app instructions; optionally initialize the selected private context backend."""
+"""Seed verified app instructions and register the app when an installed runtime is selected."""
 import argparse
 import os
 from pathlib import Path
@@ -87,14 +87,18 @@ def contents(target, origin):
 
 
 def continue_context(path, target):
-    if os.environ.get("FACTORY_CONTEXT_REPOSITORY"):
+    require(not any(os.environ.get(key) for key in ("FACTORY_CONTEXT_REPOSITORY", "FACTORY_CONTEXT_DIRECTORY")),
+            "Central context storage is removed; clear stale context configuration and select the app repository")
+    if os.environ.get("FACTORY_RUNTIME_MANIFEST") or os.environ.get("FACTORY_RUNTIME_DIRECTORY"):
         result = subprocess.run([sys.executable, str(ROOT / "scripts/runtime/project.py"), "init", "--repo", target,
                                  "--app", str(path), "--environment", os.environ.get("FACTORY_ENVIRONMENT", "development")],
                                 timeout=300)
-        require(result.returncode == 0, "Instructions preserved; private context initialization pending. Reconcile before provider work")
+        require(result.returncode == 0, "Instructions preserved; app registry initialization pending. Reconcile before provider work")
 
 
 def seed(path, expected, confirmation, dry_run=False):
+    require(not any(os.environ.get(key) for key in ("FACTORY_CONTEXT_REPOSITORY", "FACTORY_CONTEXT_DIRECTORY")),
+            "Central context storage is removed; clear stale context configuration")
     target = repository(expected)
     require(dry_run or confirmation.lower() == target, "Seeding requires matching --confirm OWNER/REPO")
     path = app_path(path)

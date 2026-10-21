@@ -23,7 +23,7 @@ The command verifies source, prepares pinned Node/npm and provider tools from a 
 | Provider identity and credential-source checks | `preflight.sh` and reviewed transport helpers; reads do not prove write permissions. |
 | Versioned execution runtime | `runtime/setup.py` / `start.py`: supported-base bootstrap, pinned provider tools and integrity manifest; `factory-aws`, `factory-gh`, `factory-git`, `factory-vercel` command paths for approved operations. |
 | Vercel hosting operations | Reviewed official CLI/REST contracts for projects selecting Vercel. `vercel-preview.py` supports authorized previews with a protected exact project, verified READY production baseline, source/provenance checks and operation recovery. |
-| Durable project context | `factory-project`: explicitly selected private Git storage for structured project config, safe journals, ownership receipts and typed resource inventory; verified restore and optimistic checkpoint/reconcile. |
+| Durable project context | `factory-project`: app-owned `.factory/` registry, safe journals/receipts and typed inventory; batched checkpoints, verified same-app restore and normal branch publication. Public apps use a minimal confidential-data-free registry. |
 | Private recovery integrity | `recovery-manifest.py`: hashes/verification for selected files; durable export/restore uses the project's approved destination. |
 | Application engineering and hosting | Agent-owned work: suitable components, dependencies, relevant checks, independent CI/CD and reviewed provider CLI/API/IaC operations. |
 

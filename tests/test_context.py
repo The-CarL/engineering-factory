@@ -1,9 +1,9 @@
-"""Real local Git persistence/restore with fake network identity and no provider calls."""
-from contextlib import redirect_stdout
+"""Project-owned registry flows using real isolated Git and synthetic provider identity."""
+from contextlib import redirect_stdout, redirect_stderr
 from datetime import datetime, timedelta, timezone
-import io
 import argparse
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -21,7 +21,6 @@ import context
 from provider import ProviderError
 from runtime import Operation, base_env, digest
 
-
 def wrapper(name):
     spec = importlib.util.spec_from_file_location('context_' + name, ROOT / 'scripts/runtime' / (name + '.py'))
     result = importlib.util.module_from_spec(spec)
@@ -30,6 +29,7 @@ def wrapper(name):
 
 
 github, aws = wrapper('github'), wrapper('aws')
+project_cli = wrapper('project')
 
 
 class ContextTests(unittest.TestCase):
@@ -37,138 +37,353 @@ class ContextTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
-        self.git = shutil.which('git')
-        self.real_run = subprocess.run
+        self.git, self.real_run = shutil.which('git'), subprocess.run
         self.tools = {name: '/verified/' + name for name in ('aws', 'gh', 'python', 'node', 'npm', 'vercel')}
         self.tools['git'] = self.git
-        self.token = uuid.uuid4().hex
-        self.target = 'fixture-owner/app'
-        self.private = True
-        self.principal = 'fixture-owner'
-        self.membership = 'active'
-        self.published = []
-        self.store_remote = self.root / 'state.git'
-        self.app_remote = self.root / 'app.git'
-        for remote in (self.store_remote, self.app_remote):
-            self.git_run('init', '--bare', '--initial-branch=main', str(remote))
-        self.app = self.root / 'app'
+        self.token, self.target = uuid.uuid4().hex, 'fixture-owner/app'
+        self.private, self.principal, self.membership = True, 'fixture-owner', 'active'
+        self.published, self.calls, self.push_failure = [], [], None
+        self.remote, self.app = self.root / 'app.git', self.root / 'app'
+        self.git_run('init', '--bare', '--initial-branch=main', str(self.remote))
         self.git_run('init', '--initial-branch=main', str(self.app))
         self.git_run('-C', str(self.app), 'remote', 'add', 'origin', 'https://github.com/' + self.target + '.git')
-        (self.app / 'source.txt').write_text('fixture application source')
+        (self.app / 'source.txt').write_text('fixture application')
         self.git_run('-C', str(self.app), 'add', '.')
         self.git_run('-C', str(self.app), 'commit', '-m', 'fixture')
-        self.git_run('-C', str(self.app), 'push', str(self.app_remote), 'HEAD:main')
-        self.environ = patch.dict(os.environ, dict(FACTORY_PRIVATE_ROOT=str(self.root), FACTORY_GITHUB_OWNER='fixture-owner',
-            FACTORY_SOURCE_REPOSITORY='fixture-owner/factory', FACTORY_SOURCE_REVISION='a' * 40,
-            FACTORY_GITHUB_CREDENTIAL_SOURCE='factory-token', FACTORY_GITHUB_TOKEN=self.token,
-            GH_TOKEN='ambient-must-not-win', FACTORY_CONTEXT_REPOSITORY='fixture-owner/state',
-            FACTORY_CONTEXT_DIRECTORY=str(self.root / 'context-cache')), clear=True)
-        self.environ.start()
-        self.addCleanup(self.environ.stop)
-        self.patch_run = patch.object(context.subprocess, 'run', side_effect=self.process)
-        self.patch_run.start()
-        self.addCleanup(self.patch_run.stop)
-        self.patch_api = patch.object(context, 'run', side_effect=self.provider)
-        self.patch_api.start()
-        self.addCleanup(self.patch_api.stop)
+        self.git_run('-C', str(self.app), 'push', str(self.remote), 'HEAD:main')
+        env = dict(FACTORY_PRIVATE_ROOT=str(self.root), FACTORY_GITHUB_OWNER='fixture-owner',
+                   FACTORY_SOURCE_REPOSITORY='fixture-owner/factory', FACTORY_SOURCE_REVISION='a' * 40,
+                   FACTORY_GITHUB_CREDENTIAL_SOURCE='factory-token', FACTORY_GITHUB_TOKEN=self.token,
+                   GH_TOKEN='ambient-must-not-win')
+        self.environ = patch.dict(os.environ, env, clear=True)
+        self.environ.start(); self.addCleanup(self.environ.stop)
+        mocked = patch.object(context.subprocess, 'run', side_effect=self.process)
+        mocked.start(); self.addCleanup(mocked.stop)
+        mocked = patch.object(context, 'run', side_effect=self.provider)
+        mocked.start(); self.addCleanup(mocked.stop)
 
     def git_run(self, *args):
-        result = self.real_run([self.git, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
-                                *args], env=base_env('/tmp'), capture_output=True, timeout=30)
+        result = self.real_run([self.git, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', *args],
+                               env=base_env('/tmp'), capture_output=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
 
     def process(self, command, **kwargs):
         command = list(command)
+        network_push = command[0] == self.git and 'push' in command and 'origin' in command
+        if network_push:
+            self.published.append(command.copy())
+            if self.push_failure == 'before':
+                return subprocess.CompletedProcess(command, 1, b'', b'fixture unavailable')
+        clone = command[0] == self.git and 'clone' in command
         if command[0] == self.git:
-            # Exercise real Git; only replace the network transport with an isolated bare repository.
             if any(value in command for value in ('fetch', 'push', 'ls-remote')) and 'origin' in command:
-                if 'push' in command:
-                    self.published.append(command.copy())
-                command[command.index('origin')] = str(self.store_remote)
-        return self.real_run(command, **kwargs)
+                command[command.index('origin')] = str(self.remote)
+            if clone:
+                url = 'https://github.com/' + self.target + '.git'
+                self.assertIn(url, command)
+                command[command.index(url)] = str(self.remote)
+        result = self.real_run(command, **kwargs)
+        if clone and result.returncode == 0:
+            self.git_run('-C', command[-1], 'remote', 'set-url', 'origin', 'https://github.com/' + self.target + '.git')
+        if network_push and self.push_failure == 'after':
+            return subprocess.CompletedProcess(command, 1, b'', b'fixture lost response')
+        return result
 
     def provider(self, command, env, provider, **kwargs):
         self.assertEqual(env.get('GH_TOKEN'), self.token)
         self.assertNotIn('FACTORY_GITHUB_TOKEN', env)
         self.assertNotIn('AWS_SECRET_ACCESS_KEY', env)
-        if 'clone' in command:
-            command = [str(self.app_remote) if value == 'https://github.com/' + self.target + '.git' else value for value in command]
-            result = self.real_run(command, env=env, capture_output=True, timeout=30)
+        if command[0] == self.git:
+            result = self.process(command, env=env, capture_output=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.git_run('-C', command[-1], 'remote', 'set-url', 'origin', 'https://github.com/' + self.target + '.git')
             return result.stdout
         endpoint = command[-1]
+        self.calls.append(endpoint)
         if endpoint == 'user':
             return json.dumps(dict(login=self.principal)).encode()
         if endpoint == 'user/memberships/orgs/fixture-owner':
             return json.dumps(dict(state=self.membership, organization=dict(login='fixture-owner'))).encode()
-        if endpoint == 'repos/fixture-owner/state':
-            size = bool(self.git_run('--git-dir=' + str(self.store_remote), 'show-ref', '--heads') if (self.store_remote / 'refs/heads/main').exists() else b'')
-            return json.dumps(dict(full_name='fixture-owner/state', private=self.private, archived=False, default_branch='main', size=int(size))).encode()
         if endpoint == 'repos/' + self.target:
-            return json.dumps(dict(full_name=self.target, private=False)).encode()
-        self.fail('Unexpected provider endpoint')
+            return json.dumps(dict(full_name=self.target, private=self.private, archived=False)).encode()
+        raise ProviderError('Unknown fixture repository; absent or inaccessible')
 
     def initialize(self):
-        result = context.checkpoint(self.target, self.app, initialize=True, environment='development', tools=self.tools)
-        os.environ.update(FACTORY_PROJECT_ID=result['project_id'], FACTORY_ENVIRONMENT='development',
-                          FACTORY_PROJECT_REPOSITORY=self.target, FACTORY_PROJECT_APP=str(self.app))
-        return result
+        data = context.checkpoint(self.target, self.app, initialize=True, environment='development', tools=self.tools)
+        os.environ.update(context.values(data, self.app))
+        return data
 
-    def journal(self, name='operations/write.jsonl'):
+    def delivery(self):
+        self.git_run('-C', str(self.app), 'add', '--', '.factory')
+        self.git_run('-C', str(self.app), 'commit', '-m', 'Register project delivery')
+        context.reconcile(self.tools, self.target, self.app)
+
+    def journal(self, name='operations/write.jsonl', state='complete'):
         path = self.root / name
         path.parent.mkdir(mode=0o700, exist_ok=True)
         now = datetime.now(timezone.utc).isoformat()
-        events = [dict(time=now, state='intent', provider='AWS', source='a' * 40, request_sha256='b' * 64),
-                  dict(time=now, state='complete', response_sha256='c' * 64, size=12)]
-        path.write_bytes(b''.join(json.dumps(event, sort_keys=True).encode() + b'\n' for event in events))
+        entries = [dict(time=now, state='intent', provider='AWS', source='a' * 40, request_sha256='b' * 64)]
+        if state == 'complete':
+            entries.append(dict(time=now, state=state, response_sha256='c' * 64, size=12))
+        else:
+            entries.append(dict(time=now, state=state, detail='Reconcile provider state before another mutation'))
+        path.write_bytes(b''.join(json.dumps(event).encode() + b'\n' for event in entries))
         path.chmod(0o600)
         return path
 
-    def test_fresh_task_restores_private_journal_and_exact_project_without_handoff_file(self):
-        initial = self.initialize()
-        journal = self.journal()
-        context.checkpoint(self.target, self.app, [(journal, 'journal')], tools=self.tools)
-        expected = journal.read_bytes()
+    def fresh(self, branch=None):
         fresh = self.root / 'fresh'
         fresh.mkdir(mode=0o700)
-        os.environ.update(FACTORY_PRIVATE_ROOT=str(fresh), FACTORY_CONTEXT_DIRECTORY=str(fresh / 'context-cache'))
-        del os.environ['FACTORY_PROJECT_APP']
-        restored_app = fresh / 'app'
-        values = context.restore(self.target, restored_app, self.tools)
-        self.assertEqual(values['FACTORY_PROJECT_ID'], initial['project_id'])
-        restored = fresh / 'operations/write.jsonl'
-        self.assertEqual(restored.read_bytes(), expected)
-        self.assertEqual(restored.stat().st_mode & 0o777, 0o600)
-        self.assertEqual((restored_app / 'source.txt').read_text(), 'fixture application source')
-        self.assertTrue(self.published)
-        self.assertTrue(all('--force' not in command for command in self.published))
+        os.environ['FACTORY_PRIVATE_ROOT'] = str(fresh)
+        os.environ.pop('FACTORY_PROJECT_APP', None)
+        app = fresh / 'app'
+        result = context.restore(self.target, app, self.tools, branch)
+        return fresh, app, result
 
+    def test_registration_batches_same_app_delivery_without_staging_dirty_code(self):
+        (self.app / 'source.txt').write_text('preserve dirty source')
+        before = self.git_run('-C', str(self.app), 'rev-parse', 'HEAD')
+        initial = self.initialize()
+        self.assertEqual(initial['repository'], self.target)
+        self.assertEqual(initial['factory_source_repository'], 'fixture-owner/factory')
+        self.assertEqual(self.git_run('-C', str(self.app), 'diff', '--cached'), b'')
+        self.assertEqual(self.git_run('-C', str(self.app), 'rev-parse', 'HEAD'), before)
+        self.assertFalse(self.published)
+        self.delivery()
+        self.assertEqual(len(self.published), 1)
+        self.assertEqual((self.app / 'source.txt').read_text(), 'preserve dirty source')
+        self.assertEqual(self.git_run('--git-dir=' + str(self.remote), 'show', 'main:source.txt'), b'fixture application')
+        self.assertTrue(all('state' not in endpoint for endpoint in self.calls))
 
-    def test_actual_github_bootstrap_and_context_free_read_work_before_project_init(self):
-        body = self.root / 'create.json'
-        body.write_text('{"name":"app","private":true}')
-        body.chmod(0o600)
+    def test_operation_queues_locally_then_checkpoint_and_fresh_clone_restore_exact_bytes(self):
+        initial = self.initialize()
+        record_path, output = self.root / 'operation.jsonl', self.root / 'raw.json'
+        with patch.object(context, 'load', return_value=self.tools), redirect_stdout(io.StringIO()):
+            operation = Operation(record_path, output, 'AWS', b'request must never enter Git')
+            operation.finish(b'{"private_response":"not registered"}')
+        local = json.loads((self.app / '.factory/project.json').read_bytes())
+        self.assertEqual(local['artifacts'], {})
+        self.assertEqual(set(context.pending(initial)), {'operation.jsonl'})
+        self.assertFalse(self.published)
+        context.checkpoint(self.target, self.app, tools=self.tools)
+        self.assertEqual(context.pending(initial), {})
+        self.delivery()
+        expected = record_path.read_bytes()
+        fresh, app, selected = self.fresh()
+        self.assertEqual(selected['FACTORY_PROJECT_ID'], initial['project_id'])
+        self.assertEqual((fresh / 'operation.jsonl').read_bytes(), expected)
+        self.assertEqual((fresh / 'operation.jsonl').stat().st_mode & 0o777, 0o600)
+        self.assertFalse((app / '.factory/artifacts/raw.json').exists())
+        self.assertNotIn(b'private_response', expected)
+        self.assertNotIn(b'request must never enter Git', expected)
+
+    def test_public_app_minimal_registry_and_confidential_export_stays_local(self):
+        self.private = False
+        os.environ.update(FACTORY_AWS_ACCOUNT_ID='111122223333', FACTORY_VERCEL_TEAM_ID='team_fixture')
+        initial = self.initialize()
+        self.assertEqual(initial['publication'], 'public-minimal')
+        self.assertEqual(set(initial['config']), {'FACTORY_GITHUB_OWNER'})
+        original = (self.app / '.factory/project.json').read_bytes()
+        path = self.journal()
+        with patch.object(context, 'load', return_value=self.tools):
+            context.automatic(path)
+        with self.assertRaisesRegex(ProviderError, 'Public app confidential export blocked'):
+            context.checkpoint(self.target, self.app, tools=self.tools)
+        self.assertEqual((self.app / '.factory/project.json').read_bytes(), original)
+        self.assertEqual(set(context.pending(initial)), {'operations/write.jsonl'})
+        self.assertFalse((self.app / '.factory/artifacts').exists())
+        self.delivery()  # Only the safe registry is committed; pending evidence stays private.
+        self.assertNotIn(b'111122223333', self.git_run('--git-dir=' + str(self.remote), 'show', 'main:.factory/project.json'))
+
+    def test_visibility_change_and_public_history_block_confidential_publication(self):
+        os.environ['FACTORY_AWS_ACCOUNT_ID'] = '111122223333'
+        initial = self.initialize()
+        self.delivery()
+        self.private = False
+        with self.assertRaises(ProviderError):
+            context.publication(self.tools, self.target, self.app)
+        initial.update(publication='public-minimal', config={'FACTORY_GITHUB_OWNER': 'fixture-owner'})
+        (self.app / '.factory/project.json').write_text(json.dumps(initial))
+        self.git_run('-C', str(self.app), 'add', '.factory')
+        self.git_run('-C', str(self.app), 'commit', '-m', 'Sanitize latest only')
+        with self.assertRaises(ProviderError):
+            context.publication(self.tools, self.target, self.app)
+        self.assertEqual(len(self.published), 1)
+
+    def test_feature_branch_restores_only_when_explicit_and_preserves_dirty_existing_app(self):
+        self.initialize()
+        self.git_run('-C', str(self.app), 'switch', '-c', 'feature')
+        context.checkpoint(self.target, self.app, tools=self.tools)
+        self.delivery()
+        (self.app / 'source.txt').write_text('uncommitted feature')
+        context.restore(self.target, self.app, self.tools)
+        self.assertEqual(self.git_run('-C', str(self.app), 'branch', '--show-current').strip(), b'feature')
+        self.assertEqual((self.app / 'source.txt').read_text(), 'uncommitted feature')
+        _, app, _ = self.fresh('feature')
+        self.assertEqual(self.git_run('-C', str(app), 'branch', '--show-current').strip(), b'feature')
+
+    def test_init_before_initial_commit_and_no_remote_default_branch_record(self):
+        empty = self.root / 'empty'
+        self.git_run('init', '--initial-branch=feature', str(empty))
+        self.git_run('-C', str(empty), 'remote', 'add', 'origin', 'https://github.com/' + self.target + '.git')
+        data = context.checkpoint(self.target, empty, initialize=True, environment='development', tools=self.tools)
+        self.assertIsNone(data['source_commit'])
+        self.assertEqual(data['branch'], 'feature')
+        self.assertFalse(self.published)
+
+    def test_repo_bootstrap_and_reads_before_registry_even_with_selected_app(self):
+        os.environ.update(FACTORY_PROJECT_REPOSITORY=self.target, FACTORY_PROJECT_APP=str(self.app))
+        body = self.root / 'create.json'; body.write_text('{"name":"app","private":true}'); body.chmod(0o600)
         calls = []
         def response(command, env, provider, **kwargs):
             calls.append(command)
-            if command[-1] == 'user':
-                return b'{"login":"fixture-owner"}'
-            if 'user/repos' in command:
-                return b'{"full_name":"fixture-owner/app","private":true}'
+            if command[-1] == 'user': return b'{"login":"fixture-owner"}'
             return b'{"full_name":"fixture-owner/app","private":true}'
-        args = argparse.Namespace(mode='gh', repo=self.target, command=['api', 'user/repos', '--method', 'POST', '--input', str(body)],
-            visibility='private', record=str(self.root / 'create.jsonl'), output=str(self.root / 'create-result.json'))
+        args = argparse.Namespace(mode='gh', repo=self.target, visibility='private',
+            command=['api', 'user/repos', '--method', 'POST', '--input', str(body)],
+            record=str(self.root / 'create.jsonl'), output=str(self.root / 'result.json'))
         with patch.object(github, 'load', return_value=self.tools), patch.object(github, 'run', side_effect=response), \
-             patch.object(context, 'restore') as restore, redirect_stdout(io.StringIO()):
+             patch.object(context, 'preflight') as preflight, redirect_stdout(io.StringIO()):
             github.execute(args)
-            args.command = ['api', 'repos/' + self.target]
-            args.record, args.output = str(self.root / 'read.jsonl'), str(self.root / 'read-result.json')
+            args.command, args.record, args.output = ['api', 'repos/' + self.target], str(self.root / 'read.jsonl'), str(self.root / 'read.json')
             github.execute(args)
-        restore.assert_not_called()
+        preflight.assert_not_called()
         self.assertTrue(any('user/repos' in command for command in calls))
-        self.assertEqual(len(self.published), 0)
+        self.assertFalse(self.published)
+
+    def test_checkpoint_command_registers_explicit_pre_registration_journal_without_git_commit(self):
+        self.initialize()
+        path = self.journal('bootstrap.jsonl')
+        before = self.git_run('-C', str(self.app), 'rev-parse', 'HEAD')
+        with patch.object(project_cli, 'load', return_value=self.tools), patch.object(project_cli, 'write_environment'), \
+             patch.object(sys, 'argv', ['factory-project', 'checkpoint', '--repo', self.target, '--app', str(self.app), '--journal', str(path)]), \
+             redirect_stdout(io.StringIO()):
+            project_cli.main()
+        self.assertEqual((self.app / '.factory/artifacts/bootstrap.jsonl').read_bytes(), path.read_bytes())
+        self.assertEqual(self.git_run('-C', str(self.app), 'rev-parse', 'HEAD'), before)
+        self.assertFalse(self.published)
+
+    def test_unknown_repo_missing_registry_and_cross_project_registry_are_not_adopted(self):
+        with self.assertRaises(ProviderError): context.restore('fixture-owner/unknown', self.root / 'unknown', self.tools)
+        self.assertFalse((self.root / 'unknown').exists())
+        with self.assertRaisesRegex(ProviderError, 'no registered project'): context.restore(self.target, self.app, self.tools)
+        data = self.initialize(); data['repository'] = 'fixture-owner/other'
+        (self.app / '.factory/project.json').write_text(json.dumps(data))
+        with self.assertRaisesRegex(ProviderError, 'another app'): context.restore(self.target, self.app, self.tools)
+        self.assertNotIn('repos/fixture-owner/other', self.calls)
+
+    def test_stale_central_configuration_fails_without_any_remote_use(self):
+        for key in ('FACTORY_CONTEXT_REPOSITORY', 'FACTORY_CONTEXT_DIRECTORY'):
+            os.environ[key] = 'stale'
+            with self.assertRaisesRegex(ProviderError, 'Central context storage'): self.initialize()
+            del os.environ[key]
+        self.assertFalse(self.calls)
+
+    def test_wrong_identity_origin_target_conflict_and_symlinks_preserve_files(self):
+        self.principal, self.membership = 'fixture-agent', 'pending'
+        with self.assertRaises(ProviderError): self.initialize()
+        self.membership = 'active'; self.initialize()
+        self.git_run('-C', str(self.app), 'remote', 'set-url', '--push', 'origin', 'https://github.com/fixture-owner/other.git')
+        with self.assertRaises(ProviderError): context.restore(self.target, self.app, self.tools)
+        self.git_run('-C', str(self.app), 'remote', 'set-url', '--push', 'origin', 'https://github.com/' + self.target + '.git')
+        os.environ['FACTORY_PROJECT_ID'] = str(uuid.uuid4())
+        with self.assertRaises(ProviderError): context.restore(self.target, self.app, self.tools)
+        os.environ.pop('FACTORY_PROJECT_ID')
+        link = self.app / '.factory/linked'; link.symlink_to(self.root)
+        with self.assertRaises(ProviderError): context.restore(self.target, self.app, self.tools)
+        self.assertTrue(link.is_symlink())
+
+    def test_pending_unknown_outcomes_restore_without_replaying_provider_work(self):
+        self.initialize()
+        path = self.journal(state='failed-or-unknown')
+        context.checkpoint(self.target, self.app, [(path, 'journal')], tools=self.tools)
+        self.delivery()
+        error = io.StringIO()
+        with redirect_stderr(error): fresh, _, _ = self.fresh()
+        self.assertEqual((fresh / 'operations/write.jsonl').read_bytes(), path.read_bytes())
+        self.assertIn('reconcile', error.getvalue())
+        self.assertTrue(all(endpoint == 'user' or endpoint.startswith('repos/') for endpoint in self.calls))
+
+    def test_changed_pending_evidence_and_arbitrary_fields_are_rejected(self):
+        initial = self.initialize(); path = self.journal()
+        with patch.object(context, 'load', return_value=self.tools): context.automatic(path)
+        path.write_bytes(b'changed raw data')
+        with self.assertRaises(ProviderError): context.checkpoint(self.target, self.app, tools=self.tools)
+        self.assertEqual((self.app / '.factory/project.json').read_bytes(), json.dumps(initial, sort_keys=True).encode() + b'\n')
+        for content in (self.token.encode(), b'private notes', b'{"state":"complete","response":"raw"}\n'):
+            path.write_bytes(content)
+            with self.assertRaises((ProviderError, ValueError)): context.journal(path.read_bytes(), initial['project_id'])
+        for name in ('../escape', '/absolute', 'operations/.git/config'):
+            with self.assertRaises(ProviderError): context.relative(name)
+
+    def test_unknown_push_result_reconcile_reads_hash_then_does_not_duplicate_push(self):
+        self.initialize()
+        self.git_run('-C', str(self.app), 'add', '.factory')
+        self.git_run('-C', str(self.app), 'commit', '-m', 'Registry')
+        self.push_failure = 'after'
+        with self.assertRaises(ProviderError): context.reconcile(self.tools, self.target, self.app)
+        self.assertEqual(len(self.published), 1)
+        self.push_failure = None
+        context.reconcile(self.tools, self.target, self.app)
+        self.assertEqual(len(self.published), 1)
+        self.assertTrue(all('--force' not in command for command in self.published))
+
+    def test_factory_git_push_preserves_dirty_feature_and_blocks_confidential_committed_registry(self):
+        self.private = False
+        initial = self.initialize()
+        self.git_run('-C', str(self.app), 'switch', '-c', 'feature')
+        context.checkpoint(self.target, self.app, tools=self.tools)
+        self.git_run('-C', str(self.app), 'add', '.factory')
+        self.git_run('-C', str(self.app), 'commit', '-m', 'Feature registry')
+        (self.app / 'source.txt').write_text('dirty source stays local')
+        args = argparse.Namespace(mode='git', repo=self.target, app=str(self.app), branch='feature', action='push',
+            command=[], visibility='public', record=str(self.root / 'push.jsonl'), output=str(self.root / 'push-result.txt'))
+        with patch.object(github, 'load', return_value=self.tools), patch.object(context, 'load', return_value=self.tools), \
+             patch.object(github, 'run', side_effect=self.provider), redirect_stdout(io.StringIO()):
+            github.execute(args)
+        self.assertEqual((self.app / 'source.txt').read_text(), 'dirty source stays local')
+        self.assertEqual(self.git_run('-C', str(self.app), 'branch', '--show-current').strip(), b'feature')
+        self.assertEqual(len(self.published), 1)
+        safe = (self.app / '.factory/project.json').read_bytes()
+        bad = dict(initial, publication='private', config=dict(initial['config'], FACTORY_AWS_ACCOUNT_ID='111122223333'))
+        (self.app / '.factory/project.json').write_text(json.dumps(bad))
+        self.git_run('-C', str(self.app), 'add', '.factory')
+        self.git_run('-C', str(self.app), 'commit', '-m', 'Confidential fixture')
+        (self.app / '.factory/project.json').write_bytes(safe)
+        args.record, args.output = str(self.root / 'blocked.jsonl'), str(self.root / 'blocked.txt')
+        with patch.object(github, 'load', return_value=self.tools), patch.object(context, 'load', return_value=self.tools), \
+             patch.object(github, 'run', side_effect=self.provider), self.assertRaises(ProviderError):
+            github.execute(args)
+        self.assertEqual(len(self.published), 1)
+
+    def test_inventory_and_ownership_restore_exact_layout_and_do_not_authorize_adoption(self):
+        initial = self.initialize(); project = initial['project_id']; now = datetime.now(timezone.utc).isoformat()
+        meta = dict(factoryProjectId=project, factoryEnvironment='development', factoryOwner='fixture-owner',
+            factoryManagedBy='engineering-factory', factorySourceRepo=self.target, factorySourceCommit='d' * 40,
+            factoryCreatedBy='fixture', factoryCreatedAt=now, factoryCreationRunId='fixture-run', factoryLastRunId='fixture-run',
+            factoryLastSourceCommit='d' * 40, factoryProvenanceVersion='1', factoryExpiresAt='none')
+        creation = self.journal()
+        events = [dict(time=now, state='intent', provider='Vercel', source='a' * 40, request_sha256='b' * 64),
+            dict(time=now, state='created-resource', team='team_fixture', project='prj_fixture', name='fixture', metadata=meta),
+            dict(time=now, state='complete', response_sha256='c' * 64, size=12)]
+        creation.write_bytes(b''.join(json.dumps(event).encode() + b'\n' for event in events))
+        owner = self.root / 'owner.json'
+        owner.write_text(json.dumps(dict(schema=1, factory_project_id=project, team_id='team_fixture', project_id='prj_fixture',
+            project_name='fixture', metadata=meta, creation_record='operations/write.jsonl', creation_record_sha256=digest(creation.read_bytes()))))
+        owner.chmod(0o600)
+        inventory = self.root / 'inventory.json'
+        inventory.write_text(json.dumps(dict(schema=1, project_id=project, environment='development', resources=[dict(
+            provider='AWS', resource_id='arn:aws:s3:::fixture-state', resource_type='s3:bucket', parent_id=None, backend_ref=None,
+            run_id='fixture-run', source_commit='d' * 40, status='ready', ownership='external')]))); inventory.chmod(0o600)
+        context.checkpoint(self.target, self.app, [(owner, 'ownership'), (inventory, 'inventory')], tools=self.tools)
+        self.delivery()
+        expected = {str(path.relative_to(self.root)): path.read_bytes() for path in (creation, owner, inventory)}
+        fresh, _, _ = self.fresh()
+        for name, data in expected.items(): self.assertEqual((fresh / name).read_bytes(), data)
+        self.assertEqual(json.loads((fresh / 'owner.json').read_bytes())['creation_record_sha256'], digest((fresh / 'operations/write.jsonl').read_bytes()))
+        invalid = json.loads(inventory.read_bytes()); invalid['resources'][0]['connection_string'] = 'forbidden'
+        with self.assertRaises(ProviderError): context.inventory(json.dumps(invalid).encode(), project)
+
 
     def test_aws_wrapper_restores_selected_targets_and_tags_before_assume_role(self):
         account, role, region = '111122223333', 'application-runner', 'eu-west-1'
@@ -209,260 +424,9 @@ class ContextTests(unittest.TestCase):
              patch.object(aws, 'run', side_effect=response), redirect_stdout(io.StringIO()):
             aws.execute(args)
         self.assertEqual(calls[-1][1]['AWS_REGION'], 'us-west-2')
-        saved = Path(os.environ['FACTORY_CONTEXT_DIRECTORY']) / 'projects' / initial['project_id'] / 'project.json'
+        saved = self.app / '.factory/project.json'
         self.assertEqual(json.loads(saved.read_bytes())['config']['FACTORY_AWS_REGION'], region)
 
-
-    def test_feature_branch_push_and_pr_preserve_dirty_app_source(self):
-        self.initialize()
-        self.git_run('-C', str(self.app), 'switch', '-c', 'feature')
-        dirty = self.app / 'source.txt'
-        dirty.write_text('preserve uncommitted application work')
-        def response(command, env, provider, **kwargs):
-            if command[0] == self.tools['gh']:
-                if command[-1] == 'user':
-                    return b'{"login":"fixture-owner"}'
-                if command[1] == 'api':
-                    return json.dumps(dict(full_name=self.target, private=False)).encode()
-                return b'https://github.com/fixture-owner/app/pull/1\n'
-            command = list(command)
-            if 'push' in command:
-                command[command.index('origin')] = str(self.app_remote)
-            result = self.real_run(command, env=env, capture_output=True, timeout=30)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            return result.stdout
-        args = argparse.Namespace(mode='git', repo=self.target, app=str(self.app), branch='feature', action='push',
-            command=[], visibility='public', record=str(self.root / 'push.jsonl'), output=str(self.root / 'push-result.txt'))
-        body = self.root / 'pr-body.txt'
-        body.write_text('Reviewed fixture change')
-        body.chmod(0o600)
-        with patch.object(github, 'load', return_value=self.tools), patch.object(context, 'load', return_value=self.tools), \
-             patch.object(github, 'run', side_effect=response), redirect_stdout(io.StringIO()):
-            github.execute(args)
-            args.mode, args.record, args.output = 'gh', str(self.root / 'pr.jsonl'), str(self.root / 'pr-result.txt')
-            args.command = ['pr', 'create', '--head', 'feature', '--title', 'Fixture change', '--body-file', str(body)]
-            github.execute(args)
-        self.assertEqual(dirty.read_text(), 'preserve uncommitted application work')
-        self.assertEqual(self.git_run('--git-dir=' + str(self.app_remote), 'rev-parse', 'feature').strip(),
-                         self.git_run('-C', str(self.app), 'rev-parse', 'HEAD').strip())
-        record_path = Path(os.environ['FACTORY_CONTEXT_DIRECTORY']) / 'projects' / os.environ['FACTORY_PROJECT_ID'] / 'project.json'
-        self.assertEqual(json.loads(record_path.read_bytes())['branch'], 'feature')
-
-    def test_nonsecret_resource_inventory_restores_ids_references_and_safe_urls(self):
-        initial = self.initialize()
-        bucket = 'arn:aws:s3:::fixture-state'
-        function = 'arn:aws:lambda:eu-west-1:111122223333:function:fixture'
-        resources = [dict(provider='AWS', resource_id=bucket, resource_type='s3:bucket', parent_id=None, backend_ref=None,
-                          run_id='fixture-run', source_commit='d' * 40, status='ready', ownership='managed'),
-                     dict(provider='AWS', resource_id=function, resource_type='lambda:function', parent_id=None, backend_ref=bucket,
-                          run_id='fixture-run', source_commit='d' * 40, status='ready', ownership='managed', url='https://fixture.example/')]
-        data = dict(schema=1, project_id=initial['project_id'], environment='development', resources=resources)
-        path = self.root / 'inventory/resources.json'
-        path.parent.mkdir(mode=0o700)
-        path.write_text(json.dumps(data) + '\n')
-        path.chmod(0o600)
-        expected = path.read_bytes()
-        context.checkpoint(self.target, self.app, [(path, 'inventory')], tools=self.tools)
-        path.unlink()
-        context.restore(self.target, self.app, self.tools)
-        self.assertEqual(path.read_bytes(), expected)
-        self.assertEqual(context.inventory(expected, initial['project_id'])['resources'][1]['backend_ref'], bucket)
-        for field, value in [('connection_string', 'untrusted'), ('url', 'https://fixture.example/?token=unreviewed'),
-                             ('resource_id', 'postgresql://fixture-user:' + uuid.uuid4().hex + '@fixture.invalid/database')]:
-            invalid = json.loads(json.dumps(data))
-            invalid['resources'][1][field] = value
-            with self.assertRaises(ProviderError):
-                context.inventory(json.dumps(invalid).encode(), initial['project_id'])
-        self.assertEqual(len(self.published), 2)
-
-
-    def test_context_inventory_and_ownership_share_reserved_environment_validation(self):
-        initial = self.initialize()
-        now = datetime.now(timezone.utc).isoformat()
-        meta = dict(factoryProjectId=initial['project_id'], factoryEnvironment='development', factoryOwner='fixture-owner',
-                    factoryManagedBy='engineering-factory', factorySourceRepo=self.target, factorySourceCommit='d' * 40,
-                    factoryCreatedBy='fixture', factoryCreatedAt=now, factoryCreationRunId='fixture-run',
-                    factoryLastRunId='fixture-run', factoryLastSourceCommit='d' * 40,
-                    factoryProvenanceVersion='1', factoryExpiresAt='none')
-        context.metadata(meta)
-        inventory = dict(schema=1, project_id=initial['project_id'], environment='development', resources=[dict(
-            provider='AWS', resource_id='fixture-owned-resource', resource_type='s3:bucket', parent_id=None, backend_ref=None,
-            run_id='fixture-run', source_commit='d' * 40, status='ready', ownership='managed')])
-        for environment in ('r', 'r-blue', 'prod-r', 'prod-r-blue', 'prod--blue', 'prod-'):
-            changed = dict(initial, environment=environment)
-            with self.assertRaises(ProviderError):
-                context.record(changed)
-            inventory['environment'] = environment
-            with self.assertRaises(ProviderError):
-                context.inventory(json.dumps(inventory).encode(), initial['project_id'])
-            meta['factoryEnvironment'] = environment
-            with self.assertRaises(ProviderError):
-                context.metadata(meta)
-        self.assertEqual(len(self.published), 1)
-
-    def test_context_owner_requires_own_identity_or_active_org_membership(self):
-        self.principal, self.membership = 'fixture-agent', 'pending'
-        with self.assertRaises(ProviderError):
-            self.initialize()
-        self.assertEqual(len(self.published), 0)
-        self.membership = 'active'
-        self.initialize()
-        self.assertEqual(len(self.published), 1)
-
-    def test_store_private_visibility_and_explicit_namespaced_source_required(self):
-        self.private = False
-        with self.assertRaises(ProviderError):
-            self.initialize()
-        self.assertFalse(self.published)
-        self.private = True
-        os.environ['FACTORY_GITHUB_CREDENTIAL_SOURCE'] = 'cli'
-        with self.assertRaises(ProviderError):
-            context.Store(self.tools)
-
-    def test_new_repository_cannot_reuse_another_project_namespace(self):
-        initial = self.initialize()
-        original_target = self.target
-        self.target = 'fixture-owner/second-app'
-        self.git_run('-C', str(self.app), 'remote', 'set-url', 'origin', 'https://github.com/' + self.target + '.git')
-        with self.assertRaises(ProviderError):
-            context.checkpoint(self.target, self.app, initialize=True, environment='development', tools=self.tools)
-        stored = Path(os.environ['FACTORY_CONTEXT_DIRECTORY']) / 'projects' / initial['project_id'] / 'project.json'
-        self.assertEqual(json.loads(stored.read_bytes())['repository'], original_target)
-        self.assertEqual(len(self.published), 1)
-
-    def test_unknown_project_no_adoption_or_app_clone(self):
-        self.initialize()
-        destination = self.root / 'unknown'
-        with self.assertRaises(ProviderError):
-            context.restore('fixture-owner/unknown', destination, self.tools)
-        self.assertFalse(destination.exists())
-
-    def test_context_never_exports_arbitrary_document_response_secret_or_executable_config(self):
-        initial = self.initialize()
-        for value in (b'{"state":"complete","response":"raw provider response"}\n', self.token.encode(), b'private notes'):
-            source = self.root / 'operations/unsafe.jsonl'
-            source.parent.mkdir(mode=0o700, exist_ok=True)
-            source.write_bytes(value)
-            source.chmod(0o600)
-            with self.assertRaises((ProviderError, ValueError)):
-                context.checkpoint(self.target, self.app, [(source, 'journal')], tools=self.tools)
-        initial['config']['FACTORY_AWS_EXECUTABLE'] = '/untrusted/program'
-        with self.assertRaises(ProviderError):
-            context.record(initial)
-        self.assertEqual(len(self.published), 1)
-
-    def test_target_conflict_and_existing_artifacts_are_preserved(self):
-        initial = self.initialize()
-        journal = self.journal()
-        context.checkpoint(self.target, self.app, [(journal, 'journal')], tools=self.tools)
-        journal.write_bytes(b'preserve later local work')
-        with self.assertRaises(ProviderError):
-            context.restore(self.target, self.app, self.tools)
-        self.assertEqual(journal.read_bytes(), b'preserve later local work')
-        journal.unlink()
-        os.environ['FACTORY_PROJECT_ID'] = str(uuid.uuid4())
-        with self.assertRaises(ProviderError):
-            context.restore(self.target, self.app, self.tools)
-        self.assertFalse(journal.exists())
-        self.assertNotEqual(initial['project_id'], os.environ['FACTORY_PROJECT_ID'])
-
-    def test_symlink_sources_and_traversal_paths_rejected_before_publication(self):
-        self.initialize()
-        original = self.journal()
-        link = self.root / 'operations/link.jsonl'
-        link.symlink_to(original)
-        with self.assertRaises(ProviderError):
-            context.checkpoint(self.target, self.app, [(link, 'journal')], tools=self.tools)
-        for name in ('../escape', '/absolute', 'operations/.git/config', 'operations/../../escape'):
-            with self.assertRaises(ProviderError):
-                context.relative(name)
-        self.assertEqual(len(self.published), 1)
-
-    def test_store_rejects_remote_executable_or_hook_tree_before_checkout(self):
-        self.initialize()
-        cache = Path(os.environ['FACTORY_CONTEXT_DIRECTORY'])
-        hook = cache / '.github/workflows/untrusted.yml'
-        hook.parent.mkdir(parents=True)
-        hook.write_text('never execute')
-        self.git_run('-C', str(cache), 'add', '.')
-        self.git_run('-C', str(cache), 'commit', '-m', 'malicious fixture')
-        self.git_run('-C', str(cache), 'push', str(self.store_remote), 'HEAD:main')
-        fresh = self.root / 'new-cache'
-        os.environ['FACTORY_CONTEXT_DIRECTORY'] = str(fresh)
-        with self.assertRaises(ProviderError):
-            context.restore(self.target, self.app, self.tools)
-        self.assertFalse((fresh / '.github').exists())
-
-
-    def test_automatic_operation_checkpoint_excludes_raw_result_and_blocks_unknown_selection(self):
-        self.initialize()
-        record_path, output = self.root / 'automatic.jsonl', self.root / 'raw-result.json'
-        with patch.object(context, 'load', return_value=self.tools), redirect_stdout(io.StringIO()):
-            operation = Operation(record_path, output, 'AWS', b'not persisted request')
-            operation.finish(b'{"private_response":"not exported"}')
-        folder = Path(os.environ['FACTORY_CONTEXT_DIRECTORY']) / 'projects' / os.environ['FACTORY_PROJECT_ID']
-        saved = json.loads((folder / 'project.json').read_bytes())
-        self.assertEqual(set(saved['artifacts']), {'automatic.jsonl'})
-        self.assertNotIn(b'private_response', (folder / 'artifacts/automatic.jsonl').read_bytes())
-        self.assertFalse((folder / 'artifacts/raw-result.json').exists())
-        os.environ['FACTORY_PROJECT_REPOSITORY'] = 'fixture-owner/unknown'
-        os.environ.pop('FACTORY_PROJECT_APP')
-        with patch.object(context, 'load', return_value=self.tools), self.assertRaises(ProviderError):
-            Operation(self.root / 'never.jsonl', self.root / 'never.json', 'AWS', b'request')
-        self.assertFalse((self.root / 'never.jsonl').exists())
-
-    def test_ownership_receipt_restores_original_relative_layout_and_digest(self):
-        initial = self.initialize()
-        project = initial['project_id']
-        now = datetime.now(timezone.utc).isoformat()
-        meta = dict(factoryProjectId=project, factoryEnvironment='development', factoryOwner='fixture-owner',
-                    factoryManagedBy='engineering-factory', factorySourceRepo=self.target, factorySourceCommit='d' * 40,
-                    factoryCreatedBy='fixture', factoryCreatedAt=now, factoryCreationRunId='fixture-run',
-                    factoryLastRunId='fixture-run', factoryLastSourceCommit='d' * 40,
-                    factoryProvenanceVersion='1', factoryExpiresAt='none')
-        events = [dict(time=now, state='intent', provider='Vercel', source='a' * 40, request_sha256='b' * 64),
-                  dict(time=now, state='created-resource', team='team_fixture', project='prj_fixture', name='fixture', metadata=meta),
-                  dict(time=now, state='complete', response_sha256='c' * 64, size=12)]
-        creation = self.root / 'operations/create.jsonl'
-        creation.parent.mkdir(mode=0o700)
-        creation.write_bytes(b''.join(json.dumps(item).encode() + b'\n' for item in events))
-        creation.chmod(0o600)
-        owner = self.root / 'ownership/vercel.json'
-        owner.parent.mkdir(mode=0o700)
-        owner.write_text(json.dumps(dict(schema=1, factory_project_id=project, team_id='team_fixture', project_id='prj_fixture',
-                        project_name='fixture', metadata=meta, creation_record='operations/create.jsonl', creation_record_sha256=digest(creation.read_bytes()))) + '\n')
-        owner.chmod(0o600)
-        expected = {str(path.relative_to(self.root)): path.read_bytes() for path in (owner, creation)}
-        context.checkpoint(self.target, self.app, [(owner, 'ownership')], tools=self.tools)
-        for path in (owner, creation):
-            path.unlink()
-        context.restore(self.target, self.app, self.tools)
-        for name, data in expected.items():
-            self.assertEqual((self.root / name).read_bytes(), data)
-        receipt = json.loads(owner.read_bytes())
-        self.assertEqual(receipt['creation_record_sha256'], digest((self.root / receipt['creation_record']).read_bytes()))
-
-    def test_push_failure_retains_committed_checkpoint_and_blocks_blind_retry(self):
-        self.initialize()
-        journal = self.journal()
-        original = context.Store.git
-        def failed(store, *args, **kwargs):
-            if args[0] == 'push':
-                raise ProviderError('fixture push failed')
-            return original(store, *args, **kwargs)
-        with patch.object(context.Store, 'git', failed), self.assertRaises(ProviderError):
-            context.checkpoint(self.target, self.app, [(journal, 'journal')], tools=self.tools)
-        cache = Path(os.environ['FACTORY_CONTEXT_DIRECTORY'])
-        saved = (cache / 'projects' / os.environ['FACTORY_PROJECT_ID'] / 'artifacts/operations/write.jsonl').read_bytes()
-        with self.assertRaises(ProviderError):
-            context.checkpoint(self.target, self.app, tools=self.tools)
-        self.assertEqual(saved, journal.read_bytes())
-        self.assertEqual(len(self.published), 1)
-        context.reconcile(self.tools)
-        self.assertEqual(len(self.published), 2)
-        context.reconcile(self.tools)
-        self.assertEqual(len(self.published), 2)
-        self.assertTrue(all('--force' not in command for command in self.published))
 
 
 if __name__ == '__main__':

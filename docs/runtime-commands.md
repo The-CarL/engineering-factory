@@ -41,7 +41,7 @@ Startup and provider commands verify source bytes, manifest, retained files/mode
 
 Network execution also depends on the host's action-time policy. If ordinary sandbox execution cannot open sockets, request the supported narrowly scoped network grant for the specific download/provider action; a domain allowlist alone is insufficient. Do not silently change client configuration or use blanket escalation. Keep OS/socket, egress, authentication and provider-permission evidence distinct.
 
-See [durable project continuity](continuity.md) for optional private Git context storage, automatic operation checkpoints and selected-project restoration.
+See [durable project continuity](continuity.md) for app-owned registry data, batched evidence checkpoints and verified selected-app restoration. Provider commands retain pending local evidence; they never create per-command app commits or push automatically.
 
 ## Private operations
 
