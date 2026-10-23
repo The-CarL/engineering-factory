@@ -35,9 +35,6 @@ lookup_repo() {
   local kind membership inventory
   check_identity
   kind="$(gh_read "users/$OWNER" --jq .type)"
-  # Shared output consumed by create-repo.sh.
-  # shellcheck disable=SC2034
-  OWNER_KIND="$kind"
   case "$kind" in
     User)
       [[ "$(printf %s "$IDENTITY" | tr '[:upper:]' '[:lower:]')" == "$(printf %s "$OWNER" | tr '[:upper:]' '[:lower:]')" ]] || fail 'Personal owner must match authenticated GitHub user.'

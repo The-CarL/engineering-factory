@@ -231,7 +231,7 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(data['branch'], 'feature')
         self.assertFalse(self.published)
 
-    def test_repo_bootstrap_and_reads_before_registry_even_with_selected_app(self):
+    def test_existing_repo_reads_before_registry_and_manual_creation_blocks(self):
         os.environ.update(FACTORY_PROJECT_REPOSITORY=self.target, FACTORY_PROJECT_APP=str(self.app))
         body = self.root / 'create.json'; body.write_text('{"name":"app","private":true}'); body.chmod(0o600)
         calls = []
@@ -244,11 +244,14 @@ class ContextTests(unittest.TestCase):
             record=str(self.root / 'create.jsonl'), output=str(self.root / 'result.json'))
         with patch.object(github, 'load', return_value=self.tools), patch.object(github, 'run', side_effect=response), \
              patch.object(context, 'preflight') as preflight, redirect_stdout(io.StringIO()):
-            github.execute(args)
+            with self.assertRaisesRegex(ProviderError, 'Repository creation is manual'):
+                github.execute(args)
+            self.assertEqual(calls, [])
             args.command, args.record, args.output = ['api', 'repos/' + self.target], str(self.root / 'read.jsonl'), str(self.root / 'read.json')
             github.execute(args)
         preflight.assert_not_called()
-        self.assertTrue(any('user/repos' in command for command in calls))
+        self.assertFalse(any('user/repos' in command for command in calls))
+        self.assertTrue(any('repos/' + self.target in command for command in calls))
         self.assertFalse(self.published)
 
     def test_checkpoint_command_registers_explicit_pre_registration_journal_without_git_commit(self):

@@ -22,7 +22,7 @@ Actions default token permissions were read-only; PR creation/approval by Action
 
 ## Credential and deployment gates
 
-Credential issuance/injection, environment save/publish/fresh-task acceptance, provider CLI/API reads, effective permission validation and live writes are separate gates. Keep their actual status in private release evidence rather than infer one from another. Follow [runtime contracts and session discipline](../standards/runtime.md). See [the checklist](credential-checklist.md). Existing local user sessions are not a mandate to reuse them in automation. Connectors and Cloud CLIs have independent authentication.
+Credential issuance/injection, environment save/publish/fresh-task acceptance, provider CLI/API reads, effective permission validation and live writes are separate gates. Keep their actual status in private release evidence rather than infer one from another. Follow [runtime contracts and session discipline](../standards/runtime.md). See [the checklist](credential-checklist.md). Existing local user sessions are not a mandate to reuse them in automation. Verify effective authentication and grants on each actual connector/CLI request path; local credential selection alone cannot establish which credential a managed path evaluates.
 
 App deployments should use native integration or per-app CI roles with narrow OIDC trust where supported. Do not export the factory's execution credentials into app GitHub secrets. Production promotion, deletion, expanded scope, and changes to IAM, organization settings, billing, or DNS need exact user authorization and a reviewable plan.
 
@@ -34,4 +34,4 @@ Use the private [access exception register](../standards/security.md#access-exce
 
 On suspected exposure, stop sensitive execution and revoke/rotate via the credential owner. Assess public history, logs, artifacts, and downstream access before an approved cleanup. Never merely delete the visible line and assume the secret safe.
 
-On a timeout or failed mutation, inspect remote state and identity first. Scripts may leave a successfully created repo even when cloning fails; rerun with the same target and visibility. Do not delete repositories/resources, force-push, change visibility, or relax policy as automatic recovery. A stale local lock needs inspection before removal.
+On a timeout or failed mutation, inspect remote state and identity first. A failed clone does not remove the existing repository Carlo supplied; inspect the same target and visibility before retrying. Repository creation is a manual prerequisite, never an automatic recovery action. Do not delete repositories/resources, force-push, change visibility, or relax policy as automatic recovery. A stale local lock needs inspection before removal.

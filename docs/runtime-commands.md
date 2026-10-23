@@ -79,12 +79,11 @@ Privately configure `FACTORY_AWS_EXECUTABLE` and its exact `FACTORY_AWS_EXECUTAB
 
 ## GitHub CLI and Git
 
+Repository creation is manual. Credential-source selection controls what the local process receives; it cannot guarantee that a managed Cloud request path uses that same credential. Record effective access to the supplied repository separately. If a deliberately invalid credential still authenticates, stop credential-routing diagnosis and retain redacted evidence; do not cycle tokens or assume a local script changes managed authentication.
+
 ```bash
 factory-gh --repo OWNER/REPO --record /private/operations/gh-op.jsonl \
   --output /private/operations/gh-result.json -- api repos/OWNER/REPO
-factory-gh --repo OWNER/REPO --record /private/operations/create-op.jsonl \
-  --output /private/operations/create-result.json -- api user/repos --method POST \
-  --input /private/operations/create-request.json
 factory-gh --repo OWNER/REPO --record /private/operations/pr-op.jsonl \
   --output /private/operations/pr-result.txt -- pr create --head BRANCH --title TITLE \
   --body-file /private/operations/pr-body.txt
@@ -95,7 +94,7 @@ factory-git --repo OWNER/REPO --app /canonical/independent/app --action push \
 
 `factory-git` also supports `--action clone` into an absent path and `--action fetch --branch BRANCH`. Normal pushes use only the checked-out branch and exact HTTPS origin; no force/deletion/mirror, alternate remote, hooks or persistent credential setup. The pinned real gh/Git executables are called directly, avoiding shims/recursion. gh authentication uses [explicit source selection](provider-workflows.md#explicit-github-credential-source): Cloud should configure the reviewed `FACTORY_GITHUB_TOKEN` binding with selector `factory-token`. Missing bindings stop before identity requests. Default `cli` retains stock gh sources for deliberately configured hosts. No automatic login or broader fallback is provided.
 
-The runner supports scoped REST operations, `repo create` and ordinary PR create/view/list/status/checks/diff/edit/ready commands; auth/token/config/extensions/editor/browser/debug and target overrides are rejected. PR creation requires an explicit same-owner `--head` branch, `--title` and private `--body-file`, avoiding implicit local Git history or templates from the factory directory. Address other PR operations by number/branch in the exact repository, without target URLs. Prefer explicit REST creation and the existing inventory/recovery-aware `create-repo.sh` for factory provisioning. The exact owner, user/org membership and repository/visibility are verified; private is default. Successful API auth does not prove Git credential transport or writes. Run their real accepted operations separately with the same binding and approved recipients.
+The runner supports scoped REST operations and ordinary PR create/view/list/status/checks/diff/edit/ready commands on an existing repository; auth/token/config/extensions/editor/browser/debug and target overrides are rejected. Repository creation through `repo create`, personal/org creation endpoints, template generation or forks is rejected before provider calls. Carlo supplies an existing repository or creates it manually from `plan-repo.sh`; use `clone-repo.sh` after verifying its URL and access. PR creation requires an explicit same-owner `--head` branch, `--title` and private `--body-file`, avoiding implicit local Git history or templates from the factory directory. Address other PR operations by number/branch in the exact repository, without target URLs. Exact owner/user-or-org membership and repository/visibility are verified before operations. Successful API identity does not prove Git credential transport, push, PR or CI capability; verify them independently on the supplied repository.
 
 These are software target checks, not token isolation. An all-repositories Contents token can still modify existing repository contents when used outside the approved path; withholding Administration does not remove that authority. Review actual scope and private access exceptions. Do not use the runtime to adopt core repositories implicitly.
 

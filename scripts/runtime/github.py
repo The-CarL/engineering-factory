@@ -45,8 +45,10 @@ def repository(tools, env, target, visibility):
             'GitHub repository identity/visibility mismatch')
 
 
-def gh_command(command, target, user, visibility):
-    require(len(command) >= 2, 'Specify a supported gh api/repo/pr command')
+def gh_command(command, target):
+    require(len(command) >= 2, 'Specify a supported gh api/pr command')
+    manual = 'Repository creation is manual. Ask Carlo to create the repository and return its URL; use scripts/plan-repo.sh for details.'
+    require(command[:2] != ['repo', 'create'], manual)
     forbidden = ('--hostname', '--header', '-H', '--verbose', '--include', '-i', '--web', '-w', '--browser', '--editor', '-e',
                  '--repo', '-R', '--recover', '--source', '--push', '--clone', '--fill', '--fill-first', '--fill-verbose', '--template')
     require(not any(arg.split('=')[0] in forbidden or arg.startswith(('-R', '-H')) for arg in command),
@@ -75,22 +77,18 @@ def gh_command(command, target, user, visibility):
         if payload is not None and method == 'GET':
             require(False, 'Specify the method explicitly for API input')
         require(method == 'GET' or not any(flag in rest for flag in ('--paginate', '--slurp')), 'Mutation pagination is forbidden')
-        creation = endpoint == 'user/repos' or endpoint == 'orgs/' + target.split('/')[0] + '/repos'
-        if creation:
-            body = json.loads(payload or b'{}')
-            require(isinstance(body, dict) and method == 'POST' and body.get('name', '').lower() == target.split('/')[1]
-                    and body.get('private') is (visibility == 'private'), 'Repository creation payload differs from target/visibility')
-            require((endpoint == 'user/repos') == (user == target.split('/')[0]), 'Repository creation owner mismatch')
-        else:
-            require(endpoint == 'repos/' + target or endpoint.startswith('repos/' + target + '/')
-                    or (method == 'GET' and endpoint == 'user'), 'API endpoint differs from the exact repository')
+        path = endpoint.split('?', 1)[0].rstrip('/')
+        require(path != 'user/repos' and not re.fullmatch(r'orgs/[^/]+/repos', path)
+                and not (method == 'POST' and path in ('repos/' + target + '/generate', 'repos/' + target + '/forks')), manual)
+        require(endpoint == 'repos/' + target or endpoint.startswith('repos/' + target + '/')
+                or (method == 'GET' and endpoint == 'user'), 'API endpoint differs from the exact repository')
         result = ['api', '--hostname', 'github.com', endpoint, '--method', method]
         if payload is not None:
             result += ['--input', '-']
         result += [flag for flag in ('--paginate', '--slurp') if flag in rest]
-        return result, payload, creation
-    require(command[0:2] == ['repo', 'create'] or (command[0] == 'pr' and command[1] in
-            ('create', 'view', 'list', 'status', 'checks', 'diff', 'edit', 'ready')), 'Use scoped gh api, repo create or ordinary PR commands')
+        return result, payload
+    require(command[0] == 'pr' and command[1] in
+            ('create', 'view', 'list', 'status', 'checks', 'diff', 'edit', 'ready'), 'Use scoped gh api or ordinary PR commands on an existing repository')
     result = list(command)
     if result[0] == 'pr':
         for index, value in enumerate(result[2:], start=2):
@@ -104,16 +102,12 @@ def gh_command(command, target, user, visibility):
             require(any(value == '--head' or value.startswith('--head=') for value in result)
                     and any(value == '--title' or value.startswith('--title=') for value in result)
                     and '--body-file' in result, 'PR creation requires explicit --head, --title and private --body-file')
-    if result[:2] == ['repo', 'create']:
-        require(len(result) >= 3 and result[2].lower() == target and '--' + visibility in result
-                and not (set(result) & ({'--private', '--public', '--internal'} - {'--' + visibility})),
-                'Repository creation requires the exact target and visibility')
     for index, value in enumerate(result):
         if value == '--body-file':
             require(index + 1 < len(result), 'PR body file is missing')
             payload = read_private(result[index + 1])
             result[index + 1] = '-'
-    return result, payload, result[:2] == ['repo', 'create']
+    return result, payload
 
 
 def git_command(tools, env, args, target):
@@ -151,29 +145,28 @@ def execute(args):
     tools = load()
     target = args.repo.lower()
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
-    creation = args.mode == 'gh' and (command[:2] == ['repo', 'create'] or command[:2] in
-                (['api', 'user/repos'], ['api', 'orgs/' + target.split('/')[0] + '/repos']))
-    selected_app = Path(os.environ.get('FACTORY_PROJECT_APP', str(ROOT / 'workspaces' / target)))
-    contextual = os.environ.get('FACTORY_PROJECT_REPOSITORY', '') == target and not creation and (selected_app / '.factory/project.json').is_file()
-    if contextual:
-        from context import preflight
-        preflight(tools)
     require(re.fullmatch(r'[a-z0-9][a-z0-9-]{0,38}/[a-z0-9][a-z0-9_.-]{0,99}', target)
             and target.split('/')[0] == os.environ.get('FACTORY_GITHUB_OWNER', '').lower(), 'GitHub target differs from approved owner/repository')
     tokens = known_credentials()
     require(not any(token and token in value for token in tokens for value in command), 'Credential argument rejected')
+    # Reject repository creation before any provider subprocess or identity read.
+    payload = None
+    if args.mode == 'gh':
+        command, payload = gh_command(command, target)
     # Validate explicit source before any subprocess, including identity calls.
     gh_environment()
+    selected_app = Path(os.environ.get('FACTORY_PROJECT_APP', str(ROOT / 'workspaces' / target)))
+    contextual = os.environ.get('FACTORY_PROJECT_REPOSITORY', '') == target and (selected_app / '.factory/project.json').is_file()
+    if contextual:
+        from context import preflight
+        preflight(tools)
     with tempfile.TemporaryDirectory(prefix='factory-github-') as temporary:
         env = selected_env(temporary, target)
         user = identity(tools, env, target.split('/')[0])
+        repository(tools, env, target, args.visibility)
         if args.mode == 'gh':
-            command, payload, creation = gh_command(command, target, user, args.visibility)
-            if not creation:
-                repository(tools, env, target, args.visibility)
             executable = [tools['gh'], *command]
         else:
-            repository(tools, env, target, args.visibility)
             executable, payload = git_command(tools, env, args, target)
             if args.action == 'push':
                 from context import publication
@@ -184,8 +177,6 @@ def execute(args):
             event(operation.record, 'identity-verified', principal=user, repository=target, visibility=args.visibility)
             response = run(executable, env, 'GitHub', input=payload, timeout=900)
             operation.received(response, tokens)
-            if args.mode == 'gh' and creation:
-                repository(tools, env, target, args.visibility)
             operation.finish(response, tokens)
         except Exception:
             operation.failed()

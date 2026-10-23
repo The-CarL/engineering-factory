@@ -18,7 +18,7 @@ The agent owns this process. Do not make the user fill every scope field, repeat
 
 ## Establish feasibility early
 
-Before substantial implementation that depends on deployment, inspect the full intended path: repository creation/push, dependencies/runtime, build/test facilities, selected hosting and storage/integrations. Compare checkout and installed runtime revisions with the intended factory source/release. Distinguish available tools, configured access, verified operations and unknown capability. Select checks needed for this workload; do not run unrelated provider gates or unauthorized write probes.
+Before substantial implementation that depends on deployment, inspect the full intended path: existing repository access/push, dependencies/runtime, build/test facilities, selected hosting and storage/integrations. If no app repository exists, provide the manual creation brief and wait for Carlo to create it before dependent implementation. Compare checkout and installed runtime revisions with the intended factory source/release. Distinguish available tools, configured access, verified operations and unknown capability. Select checks needed for this workload; do not run unrelated provider gates or unauthorized write probes.
 
 Follow [runtime standards](runtime.md) and selected [provider contracts](../docs/provider-workflows.md). A credential binding, identity read or merged runtime change does not establish a working release path. Check sandbox network/socket access and actual credential transport when required. Reuse valid evidence with its source/revision/target limits; do not repeat successful tests without a reason.
 
@@ -30,7 +30,7 @@ If an essential capability is unavailable or uncertain, surface it before commit
 
 Carry the agreed scope through implementation, meaningful checks, repository work, hosting and real outcome verification. [Bounded project work](bounded-runs.md) records exact targets and consequential operations; it is not an extra intake ceremony. Existing approval can cover necessary routine steps. Actual scope changes and action-time approvals remain gates.
 
-Once design is settled, execute the agreed sequence. For a new app, normally create and verify the authorized remote repository, implement in its independent checkout, run relevant checks, push the reviewed source, and create/verify the agreed infrastructure and deployment. Adapt to real dependencies and honor an explicitly requested order. If remote creation is blocked, say so before continuing with local-only work; do not silently replace the requested remote repository with `git init`. Keep an agreed design settled unless new evidence or user feedback requires a specific change. A repository task does not require unrelated cloud preflight.
+Once design is settled, execute the agreed sequence. For a new app, normally verify and clone an existing remote repository, implement in its independent checkout, run relevant checks, push the reviewed source, and create/verify the agreed infrastructure and deployment. If the repository is missing, propose its owner/name, visibility and description and ask Carlo to create it manually and return its URL; do not attempt automated creation or seek broader creation credentials. Adapt to real dependencies and honor an explicitly requested order. While awaiting creation or access, continue agreed independent design work and label preparation accurately; do not silently replace the remote repository with `git init`. Keep an agreed design settled unless new evidence or user feedback requires a specific change. A repository task does not require unrelated cloud preflight.
 
 A prototype can intentionally omit an integration when the user has chosen that stage and the omission is explicit. Track the remaining work to reach the working solution. A scaffold, mock, passing unit test or successful command verifies only its actual boundary. Confirm requested interaction, API/job behavior, data durability and hosted integration where relevant before claiming delivery complete.
 
@@ -49,7 +49,7 @@ Use precise states such as not started, attempted, confirmed, blocked, stopped o
 | Claim | Required evidence |
 |---|---|
 | Local repository initialized | Verified local Git root and intended origin; explicitly identify that no remote creation is established. |
-| Remote repository created | Provider readback of the exact owner/name, visibility and canonical repository URL. |
+| Existing remote repository verified | Carlo supplies an existing or manually created repository; provider readback confirms exact owner/name, visibility and canonical URL. |
 | Implemented / committed | Product code exists in the intended checkout; identify the commit when claiming it is committed. Instruction seeds and planning files alone are preparation. |
 | Pushed / PR opened | Remote branch/commit readback, or the actual PR URL, matching the intended source and target. |
 | Checks passed | Relevant checks completed against the identified source; distinguish local, CI and hosted results and name skipped checks. |
@@ -69,6 +69,6 @@ Make source and required private artifacts durable through approved push/export 
 
 Prove this experience through the [phone acceptance scenarios](../docs/mobile-workflow.md#conversational-delivery-acceptance). Factory checks validate helpers and repository policy; they do not certify agent behavior, voice support or deployment capability. Record live evidence privately and identify partial/blocked results explicitly.
 
-Evaluate failure handling as well as the happy path: a blocked repository creation is reported before any claim of creation; a stalled access check produces a timely update and no unchanged retry loop; an unverified permission hypothesis stays labeled unknown; and explicit stop prevents further task tools until restart. Source-integrity tests can verify that instruction seeds reference committed guidance; they do not prove a client follows it.
+Evaluate failure handling as well as the happy path: a missing repository produces a manual brief for Carlo before dependent implementation, and a creation acknowledgment is followed by actual access verification; a stalled access check produces a timely update and no unchanged retry loop; an unverified permission hypothesis stays labeled unknown; and explicit stop prevents further task tools until restart. Source-integrity tests can verify that instruction seeds reference committed guidance; they do not prove a client follows it.
 
 Merged guidance must reach the selected checkout and the client's actual instruction-loading path. Published runtime/snapshot changes and pinned app instruction seeds have their own rollout; existing sessions and older seeds do not automatically acquire a new revision. Follow [agent compatibility](../docs/agent-compatibility.md) and [runtime acceptance](runtime.md). Verify a fresh session against the intended source before claiming the workflow is active.

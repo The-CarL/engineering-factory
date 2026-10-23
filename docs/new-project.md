@@ -14,9 +14,27 @@ Prepare consequential operations from known configuration under [bounded project
 
 Check the intended repository/build/test/hosting/data path and actual source/runtime revisions early, before substantial dependent implementation. Surface missing capabilities or decisions with evidence and a concrete next action. Continue independent work and identify partial prototypes accurately; a local scaffold cannot establish the requested hosted integration.
 
-Use `create-repo.sh` for an authorized new repository or `clone-repo.sh` for an existing one. Private is the default; use the approved visibility and branch workflow. Verify the exact independent Git root and fetch/push origin. Keep app source and provider state out of the factory.
+Use an existing independent app repository, or have Carlo create it manually. The agent does not create GitHub repositories through the CLI, REST, GraphQL, a template or a fork. Repository creation permission is not a factory prerequisite. Private is the default; a public repository needs explicit publishing scope. Keep app source and provider state out of the factory.
 
-After design agreement, normally create and verify the remote repository before implementation; honor any explicit sequence from the user. Share its canonical URL only after provider readback confirms owner/name and visibility. If creation is blocked, report the observed failure promptly and label any permitted local work accurately. Local initialization and seeded instructions do not establish remote creation or implemented product code. Follow the diagnostic budget, evidence and stop/restart rules in [conversational delivery](../standards/conversational-delivery.md).
+If no existing repository is supplied:
+
+1. Propose the owner from approved configuration, a suitable name, a concise product description and private visibility. Treat the name and expected URL as unverified until provider readback; missing access is not proof that a name is available.
+2. Give Carlo one concise brief: open [GitHub New repository](https://github.com/new), select that owner/name/visibility, enter the description, and leave README, .gitignore and license initialization unchecked for a new empty app repository. Preserve any content if he supplies an already initialized repository.
+3. Ask Carlo to create it and return its repository URL. This is an expected manual prerequisite, not a token failure or a request to expand permissions. Continue agreed independent design/planning; pause cloning, app initialization, pushes and dependent deployments until the target exists and is accessible. Do not substitute a local-only app or another repository silently.
+4. Once Carlo supplies the URL or confirms the agreed target, verify the exact GitHub owner/name, visibility and actual access, then use `clone-repo.sh`. If the repo is not visible, distinguish not-created from not-accessible and ask only for the missing creation/access action. Do not retry creation, cycle credentials or assume new-repo connector access.
+
+The offline helper prints the brief without credentials, provider calls or filesystem writes:
+
+```bash
+./scripts/plan-repo.sh approved-owner/my-app \
+  --description "A short description of the application."
+# After Carlo creates it and supplies the target:
+./scripts/clone-repo.sh approved-owner/my-app
+```
+
+`create-repo.sh` is retained only as a compatibility alias for the offline brief; even its legacy `--confirm` argument performs no creation or clone. Factory GitHub runtime commands also reject repository creation. Existing-repository content, branch, PR and CI work remains supported within approved scope.
+
+Before repository-dependent implementation, verify the existing remote repository and independent clone's Git root and fetch/push origins. Share the canonical URL as verified only after provider readback confirms owner/name and visibility; an expected creation URL is a proposal. Then seed instructions, implement and verify the product. Existing empty repositories are valid: the agent prepares the first commit and app-owned CI within approved scope. Local initialization and seeded instructions do not establish remote publication or implemented product code. Follow the diagnostic budget, evidence and stop/restart rules in [conversational delivery](../standards/conversational-delivery.md).
 
 The local instruction helper seeds shared rules for Codex and Claude plus an app-owned engineering contract. Run it from reviewed committed factory source using the canonical absolute app path:
 
@@ -47,8 +65,10 @@ Keep the goal, decisions/assumptions, deferred decisions and triggers, scope ref
 
 ```text
 Use the engineering factory to build [PRODUCT OUTCOME AND WHO IT SERVES].
-Create or use an independent app repository with the approved visibility and branch
-workflow. Choose suitable architecture, runtime, hosting and meaningful checks from
+Use the existing independent app repository I provide. If none is provided, propose
+its owner, name, private visibility and description, then ask Carlo to create it
+manually and return its URL. Verify the repository and access before dependent work.
+Use the approved branch workflow. Choose suitable architecture, runtime, hosting and meaningful checks from
 the product needs and existing private configuration. Record actual commands and
 operations in the app. Prepare any missing consequential scope together; reuse prior
 authorization and carry routine work through implementation, relevant verification,

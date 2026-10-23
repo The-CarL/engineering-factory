@@ -17,19 +17,19 @@ make check
 
 ## Repository workflows (after the credential gate)
 
-For agent-driven creation, resolve and verify the exact target from the authorized request and approved owner/namespace, then supply the matching `--confirm` programmatically. The flag does not require another human approval of a routine generated name. Ask promptly when owner, visibility or consequential scope remains unresolved; follow [conversational delivery](../standards/conversational-delivery.md).
+Use an existing repository or prepare a concise creation brief for Carlo and ask for its URL. Do not attempt automated repository creation. Resolve the exact target from the approved owner/namespace and ask promptly when owner, visibility or consequential scope remains unresolved; follow [conversational delivery](../standards/conversational-delivery.md).
 
 Use a shell environment with explicit, approved configuration. `.env.example` is a names-only checklist; it is not a shell script and nothing automatically loads `.env`. Do not paste credentials into commands or `source` files downloaded from another repository.
 
 ```bash
 export FACTORY_GITHUB_OWNER='approved-owner'
-./scripts/create-repo.sh approved-owner/my-app --dry-run
-./scripts/create-repo.sh approved-owner/my-app --confirm approved-owner/my-app
+./scripts/plan-repo.sh approved-owner/my-app --description "A short app description."
+# Carlo creates the repository manually and returns its URL.
 ./scripts/clone-repo.sh approved-owner/my-app
 cd workspaces/approved-owner/my-app
 ```
 
-The exact owner/repo confirmation is the caller's deliberate creation request. Use `--visibility public` only with authorization to publish; the default is private. Cloning existing public/internal repos requires the matching `--visibility`. The scripts use `GET /user` and user-backed owner/membership inventory, then explicit REST creation through `gh api`; see [provider workflow contracts](provider-workflows.md). They require a user-backed GitHub CLI identity; GitHub App installation tokens are not supported without a reviewed adapter. The scripts accept GitHub.com only and require the approved personal owner to match the authenticated user, or active membership for an organization. A successful complete visible repository inventory precedes creation; inaccessible private repositories may still be hidden, so creation can safely fail with a name conflict. Failed auth, network, or malformed inventory aborts without creation.
+Carlo supplies an existing app repository or creates it manually using the brief. `plan-repo.sh` is offline; it needs only the approved owner/target and optional description. `create-repo.sh` is a compatibility alias for the same brief and performs no creation or clone. Use `--visibility public` only within approved publishing scope; private is default. Cloning an existing public/internal repo requires the matching `--visibility`. Clone checks use `GET /user` and user-backed owner/membership inventory; GitHub App installation tokens are not supported without a reviewed adapter. A successful complete visible inventory, matching visibility and independent origin are required before clone. A repository missing from inventory may be absent or inaccessible; ask Carlo for the specific creation/access action without attempting a POST or cycling credentials.
 
 Workspace owner/repo path components are canonicalized to lowercase because GitHub names are case-insensitive. Paths are anchored to the script's factory checkout, independent of current directory. Quote paths containing spaces. Run app Git commands from its printed checkout path; never from the factory root. Existing matching clones are verified but not pulled/reset. Clone failures remove only the temporary partial clone; a retry reuses the already created repo. Existing mismatched paths/origins/visibility and symlinks fail closed. A local per-repo lock prevents simultaneous script runs; inspect active processes and paths before manually removing a stale `.REPO.lock`. Do not run concurrent untrusted processes against these directories; path checks are operational safeguards, not an OS sandbox.
 
@@ -60,7 +60,7 @@ Checks are provider-specific so missing AWS tools/config do not block GitHub/Ver
 
 For a network-secret transport rejected by the native CLI, explicitly select `--vercel-transport api` for the separate reviewed REST identity/team gate. This establishes only REST capability. The CLI-capable design instead requires the explicitly approved personal direct `VERCEL_TOKEN` binding and a separate real native CLI check; see [credential transport](runtime-commands.md#vercel-credential-transport). The [preview adapter](provider-workflows.md#vercel-preview-adapter) requires an existing protected project, verified production baseline, private reviewed request, exact committed source and operation journal. Native CLI failure remains recorded. A project-scoped token may deny these user/team APIs; review a narrower contract rather than broadening credentials.
 
-These checks do not verify repo creation/push, project deployment, service permissions, enforced limits, or budget. No universal provider dry-run exists; `--dry-run` in our repo scripts is an offline plan only. Immediately before native Vercel CLI actions, resolve the app's linked project with `vercel project inspect --non-interactive` and confirm the intended team/project. The REST adapter checks its explicit IDs through provider reads. Preflight does not link or deploy.
+These checks do not verify access to a manually created app repository, clone/push/PR/CI, project deployment, service permissions, enforced limits, or budget. No universal provider dry-run exists; `--dry-run` in our repo scripts is an offline plan only. Immediately before native Vercel CLI actions, resolve the app's linked project with `vercel project inspect --non-interactive` and confirm the intended team/project. The REST adapter checks its explicit IDs through provider reads. Preflight does not link or deploy.
 
 ## Runtime source and release acceptance
 
