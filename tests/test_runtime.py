@@ -186,24 +186,44 @@ class RuntimeTests(unittest.TestCase):
         self.assertNotIn('AWS_SECRET_ACCESS_KEY', env)
         self.assertNotIn('VERCEL_TOKEN', env)
         with self.assertRaises(ProviderError):
-            github.gh_command(['auth', 'token'], 'fixture-owner/app', 'fixture-owner', 'private')
+            github.gh_command(['auth', 'token'], 'fixture-owner/app')
         for command in (['api', 'repos/other/core'], ['api', 'https://wrong.invalid'], ['pr', 'create', '-Rother/core'],
                         ['api', 'repos/fixture-owner/app', '--verbose']):
             with self.assertRaises(ProviderError):
-                github.gh_command(command, 'fixture-owner/app', 'fixture-owner', 'private')
+                github.gh_command(command, 'fixture-owner/app')
         body = self.private / 'body.json'
+        body.write_text('{"message":"Add readme","content":"SGVsbG8="}')
+        body.chmod(0o600)
+        command, payload = github.gh_command(['api', 'repos/fixture-owner/app/contents/README.md',
+            '--method', 'PUT', '--input', str(body)], 'fixture-owner/app')
+        self.assertIn('PUT', command)
+        self.assertEqual(json.loads(payload)['message'], 'Add readme')
+
+    def test_repository_creation_routes_stop_before_provider_calls(self):
+        body = self.private / 'create.json'
         body.write_text('{"name":"app","private":true}')
         body.chmod(0o600)
-        command, payload, creation = github.gh_command(['api', 'user/repos', '--method', 'POST', '--input', str(body)], 'fixture-owner/app', 'fixture-owner', 'private')
-        self.assertTrue(creation)
-        self.assertEqual(command[-2:], ['--input', '-'])
-        self.assertEqual(json.loads(payload)['name'], 'app')
-        body.write_text('{"name":"app"}')
-        with self.assertRaises(ProviderError):
-            github.gh_command(['api', 'user/repos', '--method', 'POST', '--input', str(body)], 'fixture-owner/app', 'fixture-owner', 'private')
-        body.write_text('{"name":"app","private":true}')
-        with self.assertRaises(ProviderError):
-            github.gh_command(['api', 'user/repos', '--method', 'POST', '--input', str(body), '--paginate'], 'fixture-owner/app', 'fixture-owner', 'private')
+        commands = [
+            ['repo', 'create', 'fixture-owner/app', '--private'],
+            ['api', 'user/repos', '--method', 'POST', '--input', str(body)],
+            ['api', '/user/repos?test=1', '--method', 'POST', '--input', str(body)],
+            ['api', 'orgs/fixture-owner/repos', '--method', 'POST', '--input', str(body)],
+            ['api', 'repos/fixture-owner/app/generate', '--method', 'POST', '--input', str(body)],
+            ['api', 'repos/fixture-owner/app/forks', '--method', 'POST', '--input', str(body)],
+            ['api', 'repos/fixture-owner/app/generate/', '--method', 'POST', '--input', str(body)],
+        ]
+        app = self.private / 'app'
+        (app / '.factory').mkdir(parents=True)
+        (app / '.factory/project.json').write_text('{}')
+        os.environ.update(FACTORY_PROJECT_REPOSITORY='fixture-owner/app', FACTORY_PROJECT_APP=str(app))
+        for command in commands:
+            with self.subTest(command=command), patch.object(github, 'load', return_value=self.tools), \
+                 patch('context.preflight') as preflight, patch.object(github, 'run') as process, self.assertRaisesRegex(ProviderError, 'Repository creation is manual'):
+                github.execute(self.args(mode='gh', repo='fixture-owner/app', command=command, visibility='private'))
+            process.assert_not_called()
+            preflight.assert_not_called()
+        self.assertFalse(self.record.exists())
+        self.assertFalse(self.output.exists())
 
     def test_namespaced_missing_github_binding_never_spawns_identity(self):
         del os.environ['FACTORY_GITHUB_TOKEN']
@@ -216,17 +236,16 @@ class RuntimeTests(unittest.TestCase):
         body.write_text('Reviewed application change')
         body.chmod(0o600)
         command = ['pr', 'create', '--head', 'feature', '--title', 'Application change', '--body-file', str(body)]
-        parsed, payload, creation = github.gh_command(command, 'fixture-owner/app', 'fixture-owner', 'private')
+        parsed, payload = github.gh_command(command, 'fixture-owner/app')
         self.assertEqual(parsed[-1], '-')
         self.assertEqual(payload, body.read_bytes())
-        self.assertFalse(creation)
         for command in (['pr', 'view', 'https://github.com/other/core/pull/1'],
                         ['pr', 'edit', '--add-label', 'reviewed', 'https://github.com/other/core/pull/1'],
                         ['pr', 'create', '--fill'], ['pr', 'view', '1', '-w'],
                         ['pr', 'create', '--head', 'other:feature', '--title', 'Change', '--body-file', str(body)],
                         ['pr', 'create', '--title', 'Change', '--body-file', str(body)]):
             with self.subTest(command=command), self.assertRaises(ProviderError):
-                github.gh_command(command, 'fixture-owner/app', 'fixture-owner', 'private')
+                github.gh_command(command, 'fixture-owner/app')
 
     def test_git_normal_push_has_exact_origin_branch_helper_and_no_hooks(self):
         app = self.private / 'app'

@@ -47,22 +47,8 @@ if name == "gh":
         endpoint = next((arg for arg in args[1:] if arg == "user" or arg.startswith(("users/", "user/", "orgs/"))), "")
         if "--method" in args and args[args.index("--method") + 1] == "POST":
             state["creates"] = state.get("creates", 0) + 1
-            state["create_endpoint"] = endpoint
-            payload = json.load(sys.stdin)
-            state["create_payload"] = payload
-            expected = "user/repos" if state.get("owner_type", "User") == "User" else "orgs/example-owner/repos"
-            if endpoint != expected or "--input" not in args or "--include" not in args:
-                save()
-                stop()
-            target = "example-owner/" + payload["name"]
-            visibility = "private" if payload["private"] else "public"
-            if not state.get("create_failure") or state.get("create_failure_after_write"):
-                state.setdefault("repos", []).append({"full_name": target, "visibility": visibility})
             save()
-            if state.get("create_failure"):
-                print("HTTP/2.0 403 Forbidden\r\nx-github-request-id: ABCD:123456:ABCD12:123456:12345678\r\n\r\n" + json.dumps({"message": "Resource not accessible by personal access token PRIVATE_PROVIDER_DIAGNOSTIC_MUST_NOT_LEAK"}))
-                stop()
-            print("HTTP/2.0 201 Created\r\ncontent-type: application/json\r\n\r\n" + json.dumps({"full_name": target, "private": payload["private"]}))
+            stop()  # Repository creation must never reach the provider.
         elif endpoint == "user":
             print(state.get("identity", "example-owner"))
         elif endpoint.startswith("users/"):
@@ -181,31 +167,43 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(self.state().get("clones", 0), 0)
         self.assertFalse(self.checkout.exists())
 
-    def create(self, *args, **kwargs):
-        return self.run_script("create-repo.sh", "example-owner/demo", "--confirm", "example-owner/demo", *args, **kwargs)
+    def plan(self, *args, **kwargs):
+        return self.run_script("plan-repo.sh", "example-owner/demo", *args, **kwargs)
 
     def clone(self, *args, **kwargs):
         return self.run_script("clone-repo.sh", "example-owner/demo", *args, **kwargs)
 
-    def test_create_private_then_retry_preserves_dirty_checkout(self):
-        self.create()
+    def test_manual_brief_needs_no_credentials_or_provider_tools(self):
+        (self.bin / "gh").unlink()
+        (self.bin / "git").unlink()
+        result = self.plan("--description", "A small greeting app.")
+        for value in ("MANUAL ACTION", "Carlo", "Owner: example-owner", "Repository name: demo",
+                      "Visibility: private", "Description: A small greeting app.",
+                      "Expected URL (unverified): https://github.com/example-owner/demo", "Return the repository URL"):
+            self.assertIn(value, result.stdout)
+        self.assert_no_mutations()
+        self.assertEqual(self.calls(), [])
+        self.assertFalse((self.factory / "workspaces").exists())
+
+    def test_manual_creation_then_clone_and_retry_preserves_dirty_checkout(self):
+        self.plan()
+        self.assert_no_mutations()
+        self.existing()  # Carlo's external manual action is a prerequisite, not a factory write.
+        self.clone()
         self.assertTrue((self.checkout / ".git").is_dir())
         dirty = self.checkout / "local-change.txt"
         dirty.write_text("do not reset")
-        self.create()
+        self.clone()
         self.assertEqual(dirty.read_text(), "do not reset")
-        self.assertEqual(self.state()["creates"], 1)
-        self.assertEqual(self.state()["clones"], 1)
-        self.assertEqual(self.state()["repos"][0]["visibility"], "private")
-        self.assertEqual(self.state()["create_endpoint"], "user/repos")
-        self.assertEqual(self.state()["create_payload"], {"name": "demo", "private": True})
-        self.assertFalse(any(call[1][:2] == ["repo", "create"] for call in self.calls()))
-
-    def test_existing_remote_is_reused_without_create(self):
-        self.existing()
-        self.create()
         self.assertEqual(self.state().get("creates", 0), 0)
         self.assertEqual(self.state()["clones"], 1)
+
+    def test_legacy_create_confirmation_only_prints_brief(self):
+        for flags in ([], ["--confirm", "example-owner/demo"], ["--dry-run"]):
+            result = self.run_script("create-repo.sh", "example-owner/demo", *flags)
+            self.assertIn("MANUAL ACTION", result.stdout)
+        self.assert_no_mutations()
+        self.assertEqual(self.calls(), [])
 
     def test_clone_existing_private(self):
         self.existing()
@@ -219,27 +217,26 @@ class WorkflowTests(unittest.TestCase):
         self.assert_no_mutations()
         self.clone("--visibility", "public")
 
-    def test_create_public_is_explicit(self):
-        self.create("--visibility", "public")
-        self.assertEqual(self.state()["repos"][0]["visibility"], "public")
-
-    def test_existing_visibility_mismatch_aborts(self):
-        self.existing("public")
-        self.create(ok=False)
+    def test_public_brief_is_explicit_and_still_offline(self):
+        result = self.plan("--visibility", "public")
+        self.assertIn("Visibility: public", result.stdout)
+        self.assertEqual(self.calls(), [])
         self.assert_no_mutations()
 
-    def test_missing_repo_clone_aborts_without_create(self):
-        self.clone(ok=False)
+    def test_missing_repo_requests_manual_creation_or_access_without_post(self):
+        result = self.clone(ok=False)
+        self.assertIn("Ask Carlo to create it manually if needed", result.stderr)
+        self.assertIn("grant access if it already exists", result.stderr)
+        self.assertIn("absence is not proven", result.stderr)
         self.assert_no_mutations()
 
-    def test_create_requires_exact_confirmation(self):
-        self.run_script("create-repo.sh", "example-owner/demo", ok=False)
+    def test_legacy_confirmation_mismatch_fails_without_provider_calls(self):
         self.run_script("create-repo.sh", "example-owner/demo", "--confirm", "other/repo", ok=False)
         self.assert_no_mutations()
-        self.assertFalse(any(call[0] == "gh" for call in self.calls()))
+        self.assertEqual(self.calls(), [])
 
     def test_dry_runs_do_not_call_providers_or_write(self):
-        self.run_script("create-repo.sh", "example-owner/demo", "--dry-run")
+        self.plan("--dry-run")
         self.clone("--dry-run")
         self.assert_no_mutations()
         self.assertFalse((self.factory / "workspaces").exists())
@@ -248,76 +245,69 @@ class WorkflowTests(unittest.TestCase):
     def test_bad_target_and_owner_fail_before_provider_calls(self):
         for target in ("other-owner/demo", "example-owner/../demo", "example-owner/..", "example-owner/.",
                        "example-owner/demo.git", "-bad/demo", "example-owner/demo/extra", "demo"):
-            self.run_script("create-repo.sh", target, "--dry-run", ok=False)
+            self.run_script("plan-repo.sh", target, ok=False)
         self.assert_no_mutations()
-        self.assertFalse(any(call[0] == "gh" for call in self.calls()))
+        self.assertEqual(self.calls(), [])
 
     def test_auth_failure_never_means_absence(self):
         self.update(api_failure=True)
-        self.create(ok=False)
+        result = self.clone(ok=False)
+        self.assertNotIn("Ask Carlo to create", result.stderr)
         self.assert_no_mutations()
 
     def test_inventory_network_failure_never_means_absence(self):
         self.update(inventory_failure=True)
-        self.create(ok=False)
+        self.clone(ok=False)
         self.assert_no_mutations()
 
     def test_malformed_inventory_never_means_absence(self):
         self.update(malformed_inventory=True)
-        self.create(ok=False)
+        self.clone(ok=False)
         self.assert_no_mutations()
 
-    def test_malformed_inventory_entries_never_trigger_create(self):
+    def test_malformed_inventory_entries_never_trigger_clone(self):
         for entry in ("invalid", {}, {"full_name": "example-owner/demo"},
                       {"full_name": 123, "visibility": "private"}):
             self.update(repos=[entry])
-            self.create(ok=False)
+            self.clone(ok=False)
             self.assert_no_mutations()
 
     def test_wrong_personal_identity_aborts(self):
         self.update(identity="different-user")
-        self.create(ok=False)
+        self.clone(ok=False)
         self.assert_no_mutations()
 
-    def test_active_org_membership_allows_visible_inventory(self):
+    def test_active_org_membership_allows_existing_repo_clone(self):
         self.update(owner_type="Organization")
-        self.create()
+        self.existing()
+        self.clone()
         self.assertTrue(self.checkout.is_dir())
-        self.assertEqual(self.state()["create_endpoint"], "orgs/example-owner/repos")
+        self.assertEqual(self.state().get("creates", 0), 0)
 
     def test_inactive_org_membership_aborts(self):
         self.update(owner_type="Organization", membership="pending")
-        self.create(ok=False)
+        self.clone(ok=False)
         self.assert_no_mutations()
 
-    def test_create_error_does_not_attempt_clone(self):
-        self.update(create_failure=True)
-        result = self.create(ok=False)
-        self.assertIn("HTTP 403", result.stderr)
-        self.assertIn("token cannot access this resource", result.stderr)
-        self.assertIn("request_id=ABCD:123456:ABCD12:123456:12345678", result.stderr)
-        self.assertEqual(self.state()["creates"], 1)
-        self.assertEqual(self.state().get("clones", 0), 0)
-        self.assertFalse(self.checkout.exists())
+    def test_low_level_legacy_creation_mode_is_rejected_without_requests(self):
+        result = subprocess.run([REAL_PYTHON, str(self.factory / "scripts/lib/github-api.py"),
+                                 "create", "User", "example-owner/demo", "private"],
+                                env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Repository creation is manual", result.stderr)
+        self.assertEqual(self.calls(), [])
+        self.assert_no_mutations()
 
-    def test_create_lost_response_reconciles_and_retry_does_not_post(self):
-        self.update(create_failure=True, create_failure_after_write=True)
-        self.create(ok=False)
-        self.assertEqual(self.state()["creates"], 1)
-        self.assertFalse(self.checkout.exists())
-        self.create()
-        self.assertEqual(self.state()["creates"], 1)
-        self.assertTrue(self.checkout.exists())
-
-    def test_failed_clone_cleans_partial_and_retry_reuses_remote(self):
+    def test_failed_clone_cleans_partial_and_retry_reuses_existing_remote(self):
+        self.existing()
         self.update(clone_failure=True)
-        self.create(ok=False)
+        self.clone(ok=False)
         self.assertFalse(self.checkout.exists())
         owner = self.checkout.parent
         self.assertEqual(list(owner.iterdir()), [])
         self.update(clone_failure=False)
-        self.create()
-        self.assertEqual(self.state()["creates"], 1)
+        self.clone()
+        self.assertEqual(self.state().get("creates", 0), 0)
         self.assertEqual(self.state()["clones"], 2)
         self.assertFalse((self.checkout / "partial.txt").exists())
 
@@ -366,7 +356,7 @@ class WorkflowTests(unittest.TestCase):
         external = self.base / "external"
         external.mkdir()
         (self.factory / "workspaces").symlink_to(external, target_is_directory=True)
-        self.create(ok=False)
+        self.clone(ok=False)
         self.assert_no_mutations()
         self.assertEqual(list(external.iterdir()), [])
 
@@ -375,7 +365,7 @@ class WorkflowTests(unittest.TestCase):
         external = self.base / "external"
         external.mkdir()
         self.checkout.symlink_to(external, target_is_directory=True)
-        self.create(ok=False)
+        self.clone(ok=False)
         self.assertEqual(self.state().get("creates", 0), 0)
         self.assertEqual(list(external.iterdir()), [])
 
@@ -390,7 +380,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_nonignored_workspace_aborts(self):
         (self.factory / ".gitignore").write_text("")
-        self.create(ok=False)
+        self.clone(ok=False)
         self.assert_no_mutations()
 
     def test_stale_lock_is_preserved_and_blocks_clone(self):

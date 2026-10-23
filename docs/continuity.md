@@ -1,6 +1,6 @@
 # Project-owned continuity
 
-Each independent app owns its source, `ENGINEERING.md` decisions and a bounded `.factory/` registry in **that same repository**. There is no central tracking repository or fallback. Source merge/refresh does not install or publish a runtime snapshot; verify the installed release and required GitHub credential/write capability separately. Repository creation and the first app commit remain possible before registration.
+Each independent app owns its source, `ENGINEERING.md` decisions and a bounded `.factory/` registry in **that same repository**. There is no central tracking repository or fallback. Source merge/refresh does not install or publish a runtime snapshot; verify the installed release and required GitHub credential/write capability separately. Carlo supplies an existing repository or creates it manually before cloning; the first app commit remains possible before registration.
 
 ## Initialize and continue
 

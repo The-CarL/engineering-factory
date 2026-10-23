@@ -21,6 +21,6 @@ if "$DRY_RUN"; then
   exit 0
 fi
 lookup_repo
-[[ "$REPO_STATE" != not-visible ]] || fail 'Repository not visible in successful inventory; check target and access. Nothing cloned.'
+[[ "$REPO_STATE" != not-visible ]] || fail "Repository $TARGET is not visible. Ask Carlo to create it manually if needed, return its URL, or grant access if it already exists. Use scripts/plan-repo.sh for the creation brief. Nothing cloned; absence is not proven."
 verify_visibility
 clone_verified

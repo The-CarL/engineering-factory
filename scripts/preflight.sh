@@ -15,7 +15,7 @@ done
 for tool in git gh python3 node npm aws vercel terraform cdk; do
   if command -v "$tool" >/dev/null 2>&1; then printf 'Tool %-10s available\n' "$tool"; else printf 'Tool %-10s missing (required only by selected workflow)\n' "$tool"; fi
 done
-printf 'Dry-run support: factory create/clone --dry-run = offline plan; git push --dry-run = remote negotiation.\nGitHub repository creation and Vercel deployment have no universal no-write dry-run here.\nAWS dry-run is service/operation specific; IaC plans can read APIs and are not permission proofs.\n'
+printf 'Dry-run support: plan-repo.sh and clone --dry-run = offline plans; git push --dry-run = remote negotiation.\nGitHub repository creation is manual; Vercel deployment has no universal no-write dry-run here.\nAWS dry-run is service/operation specific; IaC plans can read APIs and are not permission proofs.\n'
 if "$OFFLINE" || [[ ${#PROVIDERS[@]} -eq 0 ]]; then
   printf 'Tool inventory only. Authentication, approved targets, and write permissions UNVERIFIED.\n'
   exit 0
@@ -28,7 +28,7 @@ for provider in "${PROVIDERS[@]}"; do
       [[ "${FACTORY_GITHUB_OWNER:-}" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?$ ]] || fail 'Set a valid FACTORY_GITHUB_OWNER.'
       TARGET="$FACTORY_GITHUB_OWNER/preflight-probe"; OWNER="$FACTORY_GITHUB_OWNER"
       lookup_repo
-      printf 'GitHub: identity and approved owner inventory readable. Repository creation/push permissions UNVERIFIED.\n' ;;
+      printf 'GitHub: identity and approved owner inventory readable. Repository creation is manual. Existing-repository clone/push/PR/CI permissions UNVERIFIED.\n' ;;
     vercel)
       if [[ "$VERCEL_TRANSPORT" == api ]]; then
         python3 "$FACTORY_ROOT/scripts/vercel-preview.py" identity || fail 'Vercel REST identity gate failed.'
