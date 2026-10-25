@@ -140,6 +140,18 @@ class ContextTests(unittest.TestCase):
         result = context.restore(self.target, app, self.tools, branch)
         return fresh, app, result
 
+    def test_dns_zone_pair_persists_in_app_registry_and_restores_without_global_discovery(self):
+        zone = dict(FACTORY_AWS_DNS_ZONE_ID='ZEXAMPLE', FACTORY_AWS_DNS_ZONE_NAME='example.test')
+        os.environ.update(zone)
+        data = self.initialize()
+        self.assertTrue(all(data['config'].get(key) == value for key, value in zone.items()))
+        self.delivery()
+        for key in zone:
+            os.environ.pop(key)
+        _, _, restored = self.fresh()
+        self.assertTrue(all(restored.get(key) == value for key, value in zone.items()))
+        self.assertFalse(any('route53' in endpoint for endpoint in self.calls))
+
     def test_registration_batches_same_app_delivery_without_staging_dirty_code(self):
         (self.app / 'source.txt').write_text('preserve dirty source')
         before = self.git_run('-C', str(self.app), 'rev-parse', 'HEAD')

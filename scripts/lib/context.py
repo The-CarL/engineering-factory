@@ -24,6 +24,8 @@ CONFIG = {
     'VERCEL_PROJECT_ID': r'prj_[A-Za-z0-9]+',
     'FACTORY_AWS_ACCOUNT_ID': r'[0-9]{12}',
     'FACTORY_AWS_ROLE_NAME': r'[A-Za-z0-9+=,.@_-]{1,64}',
+    'FACTORY_AWS_DNS_ZONE_ID': r'Z[A-Z0-9]{1,63}',
+    'FACTORY_AWS_DNS_ZONE_NAME': r'[a-z0-9.-]{3,253}',
     'FACTORY_AWS_REGION': r'[a-z]{2}(?:-[a-z]+)+-[0-9]+',
 }
 LIMIT = 4 * 1024 * 1024
@@ -184,6 +186,8 @@ def record(value):
     require(isinstance(value['config'], dict) and set(value['config']) <= set(CONFIG), 'Context cannot supply credentials or executable configuration')
     for key, selected in value['config'].items():
         require(isinstance(selected, str) and re.fullmatch(CONFIG[key], selected), 'Invalid provider target configuration')
+    from dns_records import configured as dns_configured
+    dns_configured(value['config'])
     require(value['config'].get('FACTORY_GITHUB_OWNER', '').lower() == value['repository'].split('/')[0], 'Context repository owner mismatch')
     require(isinstance(value['artifacts'], dict) and len(value['artifacts']) <= 256, 'Context artifact count exceeded')
     for name, item in value['artifacts'].items():

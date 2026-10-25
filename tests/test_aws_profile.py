@@ -80,6 +80,107 @@ class AWSProfileTests(unittest.TestCase):
         core = next(s for s in dns if s['Effect'] == 'Deny' and s['Action'] == 'route53:ChangeResourceRecordSets')
         self.assertEqual(core, self.baseline['Statement'][1])
 
+    def application_dns(self):
+        self.config['dns'] = dict(mode='application-records-v1', zone_id='ZEXAMPLE', zone_name='example.test',
+            protected_record_names=['example.test', 'core.example.test', '_acme-challenge.core.example.test',
+                                    'www.example.test', '_vercel.www.example.test'],
+            release_protected_subtrees=['*.core.example.test'])
+        # A second retained subtree exercises exact-child deduplication without removing protection.
+        key = 'route53:ChangeResourceRecordSetsNormalizedRecordNames'
+        self.baseline['Statement'][1]['Condition']['ForAnyValue:StringLike'][key] += ['www.example.test', '*.www.example.test']
+        return profile.render(*self.args)
+
+    @staticmethod
+    def dns_allowed(policy, names, types, zone='ZEXAMPLE'):
+        # Evaluate only this generated DNS contract, not an AWS authorization simulator.
+        resource = 'arn:aws:route53:::hostedzone/' + zone
+        keys = {'route53:ChangeResourceRecordSetsNormalizedRecordNames': names,
+                'route53:ChangeResourceRecordSetsRecordTypes': types}
+        verdicts = []
+        for item in policy['Statement']:
+            actions = item.get('Action', [])
+            actions = [actions] if isinstance(actions, str) else actions
+            excluded = item.get('NotAction', [])
+            excluded = [excluded] if isinstance(excluded, str) else excluded
+            if (not any(fnmatch.fnmatchcase('route53:ChangeResourceRecordSets', a) for a in actions)
+                    and not (excluded and not any(fnmatch.fnmatchcase('route53:ChangeResourceRecordSets', a) for a in excluded))):
+                continue
+            resources = item.get('Resource', [])
+            resources = [resources] if isinstance(resources, str) else resources
+            if not any(fnmatch.fnmatchcase(resource, r) for r in resources):
+                continue
+            match = True
+            for operator, entries in item.get('Condition', {}).items():
+                for key, patterns in entries.items():
+                    if key not in keys:  # Other conditions are covered separately; not triggered in this DNS-only model.
+                        match = False
+                        continue
+                    values = keys[key]
+                    patterns = [patterns] if isinstance(patterns, str) else patterns
+                    if operator == 'Null':
+                        match &= (values is None) == (patterns[0] == 'true')
+                        continue
+                    checks = [any(fnmatch.fnmatchcase(v, p) for p in patterns) for v in (values or [])]
+                    if operator.endswith(('StringNotLike', 'StringNotEquals')):
+                        checks = [not value for value in checks]
+                    match &= all(checks) if operator.startswith('ForAllValues:') else any(checks)
+            if match:
+                verdicts.append(item['Effect'])
+        return 'Allow' in verdicts and 'Deny' not in verdicts
+
+    def test_application_dns_child_allowed_parent_validation_wildcards_and_mixed_batches_protected(self):
+        result = self.application_dns()
+        for filename in ('runner-dns-policy.json', 'runner-boundary.json', 'app-execution-boundary.json'):
+            policy = result[filename]
+            for kind in ('A', 'AAAA', 'CNAME', 'TXT', 'CAA', 'MX', 'SRV', 'HTTPS'):
+                self.assertTrue(self.dns_allowed(policy, ['hello.core.example.test'], [kind]), (filename, kind))
+            self.assertTrue(self.dns_allowed(policy, ['_validation.hello.core.example.test'], ['CNAME']))
+            for record_name in ('example.test', 'core.example.test', '_acme-challenge.core.example.test',
+                                'www.example.test', '_vercel.www.example.test', 'child.www.example.test',
+                                r'\052.core.example.test', 'outside.test'):
+                self.assertFalse(self.dns_allowed(policy, [record_name], ['CNAME']), (filename, record_name))
+                self.assertFalse(self.dns_allowed(policy, ['hello.core.example.test', record_name], ['CNAME']))
+            for kind in ('NS', 'SOA', 'DS'):
+                self.assertFalse(self.dns_allowed(policy, ['hello.core.example.test'], [kind]))
+                self.assertFalse(self.dns_allowed(policy, ['hello.core.example.test'], ['CNAME', kind]))
+            self.assertFalse(self.dns_allowed(policy, ['hello.core.example.test'], ['CNAME'], zone='ZOTHER'))
+            self.assertFalse(self.dns_allowed(policy, None, ['CNAME']))
+            self.assertFalse(self.dns_allowed(policy, ['hello.core.example.test'], None))
+        # An arbitrary identity Allow cannot exceed either self-contained boundary's DNS ceiling.
+        broad_identity = profile.document([profile.statement('*', '*')])
+        for filename in ('runner-boundary.json', 'app-execution-boundary.json'):
+            self.assertTrue(self.dns_allowed(broad_identity, ['core.example.test'], ['CNAME']))
+            self.assertFalse(self.dns_allowed(result[filename], ['core.example.test'], ['CNAME']))
+
+    def test_application_dns_preserves_non_dns_guards_and_full_rollback(self):
+        result = self.application_dns()
+        # Compare before/after with identical protected original inputs and only opt-in absent.
+        config = copy.deepcopy(self.config)
+        del config['dns']
+        previous = profile.render(config, *self.args[1:])
+        def non_dns(policy):
+            return [item for item in policy['Statement'] if 'route53:' not in json.dumps(item)]
+        for filename in result:
+            if filename not in ('runner-dns-baseline.json', 'runner-dns-policy.json'):
+                self.assertEqual(non_dns(result[filename]), non_dns(previous[filename]), filename)
+        self.assertEqual(result['runner-dns-baseline.json'], self.baseline)
+        inline = result['runner-dns-policy.json']
+        self.assertTrue(any(s['Effect'] == 'Deny' and 'core.example.test' in json.dumps(s) for s in inline['Statement']))
+
+    def test_application_dns_explicit_migration_inventory_and_target_fail_closed(self):
+        self.application_dns()
+        valid = copy.deepcopy(self.config['dns'])
+        for changes in (dict(mode='unknown'), dict(zone_id='ZOTHER'), dict(zone_name='other.test'),
+                        dict(protected_record_names=['example.test']), dict(release_protected_subtrees=['*.unknown.example.test']),
+                        dict(protected_record_names=valid['protected_record_names'] + ['*.example.test']),
+                        dict(protected_record_names=valid['protected_record_names'] + ['outside.test'])):
+            self.config['dns'] = dict(valid, **changes)
+            with self.assertRaises(ValueError):
+                profile.render(*self.args)
+        self.config['dns'] = dict(valid, release_protected_subtrees=[])
+        retained = profile.render(*self.args)
+        self.assertFalse(self.dns_allowed(retained['runner-boundary.json'], ['hello.core.example.test'], ['CNAME']))
+
     def test_general_service_grant_has_no_short_service_or_region_allowlist(self):
         for name in ('runner-boundary.json', 'app-execution-boundary.json'):
             broad = next(s for s in self.result[name]['Statement'] if s['Effect'] == 'Allow' and 'NotAction' in s)

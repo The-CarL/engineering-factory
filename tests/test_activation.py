@@ -81,6 +81,15 @@ class ActivationTests(unittest.TestCase):
                                      dict(GH_TOKEN='factory-token-binding-missing', GITHUB_TOKEN='factory-token-binding-missing'), env)
                 self.assertEqual(result.stderr, 'ERROR: FACTORY_GITHUB_TOKEN binding is required for factory-token mode.\n')
 
+    def test_dns_zone_config_is_validated_and_retained_in_activation(self):
+        zone = dict(FACTORY_AWS_DNS_ZONE_ID='ZEXAMPLE', FACTORY_AWS_DNS_ZONE_NAME='example.test')
+        with patch.dict(os.environ, dict(self.env, **zone, FACTORY_GITHUB_TOKEN=self.tokens[0]), clear=True):
+            runtime.write_environment(self.activation, self.tools)
+        env = dict(self.env, FACTORY_GITHUB_TOKEN=self.tokens[0])
+        self.source('. "$1" && "$2" -c "$3"', zone, env)
+        with patch.dict(os.environ, dict(self.env, FACTORY_AWS_DNS_ZONE_ID='ZEXAMPLE'), clear=True), self.assertRaises(ValueError):
+            runtime.write_environment(self.activation, self.tools)
+
     def test_explicit_cli_activation_preserves_ambient_sources_and_config(self):
         env = dict(self.env, FACTORY_GITHUB_CREDENTIAL_SOURCE='cli', FACTORY_GITHUB_TOKEN=self.tokens[0])
         with patch.dict(os.environ, env, clear=True):

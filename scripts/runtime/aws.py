@@ -10,6 +10,7 @@ import sys
 import tempfile
 import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
+from dns_records import configured as dns_configured
 from runtime import Operation, Parser, base_env, cli, digest, event, known_credentials, load, project_scope, require, run
 
 
@@ -22,6 +23,7 @@ def execute(args):
             and re.fullmatch(r'[A-Za-z0-9+=,.@_-]{1,64}', role)
             and re.fullmatch(r'(?:us|eu|ap|sa|ca|me|af|il|mx)-(?:[a-z]+-)+[0-9]+', region) and not region.startswith(('us-gov-', 'us-iso')),
             'Set exact approved commercial AWS account, role name and region')
+    dns = dns_configured(os.environ)
     duration = int(os.environ.get('FACTORY_AWS_SESSION_SECONDS', '900'))
     require(900 <= duration <= 3600, 'Requested AWS session must be 900..3600 seconds')
     command = list(args.command)
@@ -73,6 +75,7 @@ def execute(args):
             require(30 < remaining <= duration + 120 and all(isinstance(creds.get(key), str) and creds[key]
                     and '\n' not in creds[key] for key in ('AccessKeyId', 'SecretAccessKey', 'SessionToken')),
                     'AssumeRole returned invalid/expired credentials')
+            env.update(dns)
             env.update(AWS_ACCESS_KEY_ID=creds['AccessKeyId'], AWS_SECRET_ACCESS_KEY=creds['SecretAccessKey'], AWS_SESSION_TOKEN=creds['SessionToken'])
             identity = json.loads(run([tools['aws'], 'sts', 'get-caller-identity', *common], env, 'AWS'))
             require(identity.get('Account') == account and identity.get('Arn') == expected, 'Assumed AWS account/role verification failed')
