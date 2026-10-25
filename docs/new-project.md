@@ -36,7 +36,7 @@ The offline helper prints the brief without credentials, provider calls or files
 
 Before repository-dependent implementation, verify the existing remote repository and independent clone's Git root and fetch/push origins. Share the canonical URL as verified only after provider readback confirms owner/name and visibility; an expected creation URL is a proposal. Then seed instructions, implement and verify the product. Existing empty repositories are valid: the agent prepares the first commit and app-owned CI within approved scope. Local initialization and seeded instructions do not establish remote publication or implemented product code. Follow the diagnostic budget, evidence and stop/restart rules in [conversational delivery](../standards/conversational-delivery.md).
 
-The local instruction helper seeds shared rules for Codex and Claude plus an app-owned engineering contract. Run it from reviewed committed factory source using the canonical absolute app path:
+The local instruction helper seeds agent-neutral shared rules, a thin Claude entrypoint and an app-owned engineering contract. Other clients load the same rules through their documented instruction mechanism; see [agent compatibility](agent-compatibility.md). Run it from reviewed committed factory source using the canonical absolute app path:
 
 ```bash
 python3 scripts/seed-project.py \

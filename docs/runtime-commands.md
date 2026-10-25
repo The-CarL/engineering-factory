@@ -1,6 +1,6 @@
-# Versioned Cloud runtime and command paths
+# Versioned execution runtime and command paths
 
-The runtime supplies general provider commands for selected application workloads. It installs no application, CI workflow, IAM grant or environment binding. Provider permissions, exact task scope and action-time controls remain the boundary; runtime commands do not authorize operations or make core resources safe by naming them.
+The runtime supplies general provider commands for selected application workloads, independently of the AI client. Its managed installer requires the supported Linux host; see [execution hosts](execution-hosts.md) for host-specific activation, network and credential mapping. It installs no application, CI workflow, IAM grant or environment binding. Provider permissions, exact task scope and action-time controls remain the boundary; runtime commands do not authorize operations or make core resources safe by naming them.
 
 ## Diagnose the executing snapshot
 

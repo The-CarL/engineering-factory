@@ -1,6 +1,6 @@
 # Architecture
 
-One reusable factory environment supports independent application repositories. Each product chooses its own architecture, runtime, checks and hosting. Static sites, APIs/services, full-stack apps, workers/jobs and other workloads share the factory's operating capabilities without sharing application source or deployment state.
+The shared factory core is independent of the AI client and execution host. Codex, Claude Code or another client loads the same project rules; the selected host supplies shell, tools, credentials and network access. Codex Cloud is one documented host profile. A reusable execution environment supports independent application repositories. Each product chooses its own architecture, runtime, checks and hosting. Static sites, APIs/services, full-stack apps, workers/jobs and other workloads share the factory's operating capabilities without sharing application source or deployment state.
 
 ```text
 Phone or desktop -> task in the reusable factory environment
@@ -13,7 +13,7 @@ Private approved execution identities -> exact operations / provider boundaries
 
 The public factory contains shared standards, local instruction templates and focused helpers. Carlo supplies an existing repository or creates it manually from an offline brief; repository cloning verifies targets and origins. Instruction seeding adds three files with usable shared rules and pinned factory references. The app agent performs implementation and relevant provider CLI/API/IaC work. [Application design](../standards/application-design.md) guides component and verification choices.
 
-Apps use independent origins and ignored `workspaces/OWNER/REPO` clones. Keep application source, credentials and private inventory outside public factory source. Codex/Claude receive local AGENTS/CLAUDE/ENGINEERING rules through [instruction seeding](new-project.md#repository-and-instructions); each client still needs its own installation/authentication/instruction-loading proof.
+Apps use independent origins and ignored `workspaces/OWNER/REPO` clones. Keep application source, credentials and private inventory outside public factory source. AI clients receive shared AGENTS/ENGINEERING rules and any required thin client entrypoint through [instruction seeding](new-project.md#repository-and-instructions); each client still needs its own installation/authentication/instruction-loading proof.
 
 ## Execution and ownership boundaries
 

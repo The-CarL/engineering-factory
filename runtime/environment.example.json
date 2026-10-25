@@ -65,7 +65,7 @@
   ],
   "startup_entry": "python3 runtime/start.py --environment-file \"$FACTORY_PRIVATE_ROOT/runtime.env\" && . \"$FACTORY_PRIVATE_ROOT/runtime.env\"",
   "command_directory": "$FACTORY_RUNTIME_DIRECTORY/bin",
-  "notes": "Names and design only; no credentials, private targets or live configuration applied here. Activation explicitly selects factory-token by default. Project continuity belongs to the selected app repository; no central context repository is used. The host must support the required network execution grant; an allowlisted domain alone is insufficient.",
+  "notes": "Codex Cloud binding-profile example and names only; other hosts map these names to their approved credential and activation mechanisms. No credentials, private targets or live configuration are applied here. Activation explicitly selects factory-token by default. Project continuity belongs to the selected app repository; no central context repository is used. The host must permit actual network execution; request a supported per-action grant only when that host requires one. An allowlisted domain alone does not establish socket access.",
   "binding_alternatives": [
     {
       "name": "VERCEL_TOKEN",
