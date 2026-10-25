@@ -6,6 +6,8 @@ The versioned implementation is [runtime/install.py](../runtime/install.py), [ru
 
 ## Source and portability
 
+The runtime is independent of the AI client: it runs provider tools from a shell and does not install or invoke Codex, Claude Code or another model client. The shipped managed installer requires Linux x86_64/glibc with the documented Git/Python floor; client-neutral instructions do not imply support for every OS. Map host startup, credentials, network access and persistence through [execution hosts](../docs/execution-hosts.md). Codex Cloud publication is a host-specific release mechanism.
+
 - Version generic, reviewed installer/wrapper/check source in Git. Keep credentials, exact provider targets, private inventories and operation evidence outside public Git. Link each private configuration/release to its reviewed source commit.
 - Pin tools and dependencies; retain lockfiles and reviewed archive hashes or signature requirements. Verify trusted signer identity, signature validity and expiry where signatures are used. Never bypass an integrity gate to finish setup.
 - Declare whether a release depends on a prepared filesystem snapshot or supports bootstrap from an empty image. A saved snapshot is not proof of an empty-image install. Record base/runtime versions, required platform capabilities and external dependencies.

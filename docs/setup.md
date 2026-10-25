@@ -2,6 +2,10 @@
 
 Start with [Create or continue an application](new-project.md). This page prepares factory tools and repository/instruction capabilities. Each app chooses its architecture/runtime/providers and owns implementation, relevant checks, CI/CD and hosting/operations.
 
+## AI client and execution host
+
+The shared rules and provider commands do not require Codex. Select the AI client under [agent compatibility](agent-compatibility.md) and prepare its actual execution host under [execution hosts](execution-hosts.md). A Claude or other client can use the supported Linux runtime through shell access without a Codex Cloud environment. Each client needs its own verified instruction loading, authentication, permissions and tool exposure. Codex Cloud setup below applies only when that host is selected.
+
 ## Local foundation checks (no provider credentials)
 
 Prerequisites: Bash 3.2+, Git, Python 3.9+, curl, tar, and make. The tool installer supports macOS arm64 and Linux x86_64; it downloads official ShellCheck 0.10.0 and Gitleaks 8.24.3 binaries, verifies reviewed SHA256 hashes, and installs only into ignored `.cache/tools`. It never installs global tools. Unsupported platforms fail explicitly and need a reviewed checksum entry.
@@ -13,7 +17,7 @@ make check
 ./scripts/preflight.sh --offline
 ```
 
-`make check` requires the pinned versions, runs shell syntax/ShellCheck, repository policy, isolated mocked workflows, a synthetic scanner detection test, a scan of the current non-ignored source, and reachable Git history. CI uses the same command with full history. The default preflight inventories tools and never authenticates. Git/gh/Python are needed for GitHub workflows; Node/npm/Vercel for Vercel work; AWS CLI for Phase 3 AWS identity and policy validation. Terraform/CDK are optional and stack-specific. Provider CLIs are deliberately not installed by the validation-tool script; record and pin their reviewed versions in the environment release manifest. These checks do not install or authenticate Codex or Claude Code; see [agent compatibility](agent-compatibility.md).
+`make check` requires the pinned versions, runs shell syntax/ShellCheck, repository policy, isolated mocked workflows, a synthetic scanner detection test, a scan of the current non-ignored source, and reachable Git history. CI uses the same command with full history. The default preflight inventories tools and never authenticates. Git/gh/Python are needed for GitHub workflows; Node/npm/Vercel for Vercel work; AWS CLI for Phase 3 AWS identity and policy validation. Terraform/CDK are optional and stack-specific. Provider CLIs are deliberately not installed by the validation-tool script; record and pin their reviewed versions in the environment release manifest. These checks do not install or authenticate an AI client; see [agent compatibility](agent-compatibility.md).
 
 ## Repository workflows (after the credential gate)
 
@@ -46,7 +50,7 @@ python3 scripts/seed-project.py --app /absolute/canonical/app-path --repo approv
 python3 scripts/seed-project.py --app /absolute/canonical/app-path --repo approved-owner/my-app --confirm approved-owner/my-app
 ```
 
-This helper verifies a standalone Git root, exact safe fetch/push origins and the committed helper/templates/application standard before writing only AGENTS.md, CLAUDE.md and ENGINEERING.md. Existing matching files are unchanged; any differing output stops all seeding for deliberate integration. It generates no app code, commands, CI or deploy tooling, and executes no hooks. Without a selected installed runtime it makes no provider calls. With that runtime, successful seeding also registers the verified app in its own `.factory/` directory; apply its generated project activation. Registration does not commit or push files. Dry-run remains offline and writes nothing. Local shared rules and pinned references serve both agents. See [project guidance](new-project.md).
+This helper verifies a standalone Git root, exact safe fetch/push origins and the committed helper/templates/application standard before writing only AGENTS.md, CLAUDE.md and ENGINEERING.md. Existing matching files are unchanged; any differing output stops all seeding for deliberate integration. It generates no app code, commands, CI or deploy tooling, and executes no hooks. Without a selected installed runtime it makes no provider calls. With that runtime, successful seeding also registers the verified app in its own `.factory/` directory; apply its generated project activation. Registration does not commit or push files. Dry-run remains offline and writes nothing. Local shared rules and pinned references serve any selected AI client once its instruction-loading path is verified. See [project guidance](new-project.md).
 
 ## Read-only provider checks (later, with approved identities)
 

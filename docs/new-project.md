@@ -1,6 +1,6 @@
 # Create or continue an application
 
-Use the reusable factory environment for independent applications. Describe the product outcome; the agent derives the architecture, implementation, checks and hosting work from that need and the approved private configuration. Static sites, APIs, services, full-stack apps, workers and other workloads can use different components and providers.
+Use the reusable factory environment for independent applications. Carlo brings the vision and co-designs with the agent; the agent acts as his build manager and owns turning the agreed outcome into a working solution. Use available tools, configured environments and shared standards to plan and execute autonomously within authorized scope. Adapt the discussion and order of work to the project. Static sites, APIs, services, full-stack apps, workers and other workloads can use different components and providers.
 
 ## Product scope and decisions
 
@@ -14,7 +14,7 @@ Prepare consequential operations from known configuration under [bounded project
 
 Check the intended repository/build/test/hosting/data path and actual source/runtime revisions early, before substantial dependent implementation. Surface missing capabilities or decisions with evidence and a concrete next action. Continue independent work and identify partial prototypes accurately; a local scaffold cannot establish the requested hosted integration.
 
-Use an existing independent app repository, or have Carlo create it manually. The agent does not create GitHub repositories through the CLI, REST, GraphQL, a template or a fork. Repository creation permission is not a factory prerequisite. Private is the default; a public repository needs explicit publishing scope. Keep app source and provider state out of the factory.
+Establish the repository during codesign: use an existing independent app repository supplied by Carlo, or propose the details for him to create it manually. The agent does not create GitHub repositories through the CLI, REST, GraphQL, a template or a fork. Repository creation permission is not a factory prerequisite. Private is the default; a public repository needs explicit publishing scope. Keep app source and provider state out of the factory.
 
 If no existing repository is supplied:
 
@@ -36,7 +36,7 @@ The offline helper prints the brief without credentials, provider calls or files
 
 Before repository-dependent implementation, verify the existing remote repository and independent clone's Git root and fetch/push origins. Share the canonical URL as verified only after provider readback confirms owner/name and visibility; an expected creation URL is a proposal. Then seed instructions, implement and verify the product. Existing empty repositories are valid: the agent prepares the first commit and app-owned CI within approved scope. Local initialization and seeded instructions do not establish remote publication or implemented product code. Follow the diagnostic budget, evidence and stop/restart rules in [conversational delivery](../standards/conversational-delivery.md).
 
-The local instruction helper seeds shared rules for Codex and Claude plus an app-owned engineering contract. Run it from reviewed committed factory source using the canonical absolute app path:
+The local instruction helper seeds agent-neutral shared rules, a thin Claude entrypoint and an app-owned engineering contract. Other clients load the same rules through their documented instruction mechanism; see [agent compatibility](agent-compatibility.md). Run it from reviewed committed factory source using the canonical absolute app path:
 
 ```bash
 python3 scripts/seed-project.py \

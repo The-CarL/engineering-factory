@@ -8,4 +8,4 @@
 - For user interfaces, verify key interactions, accessibility, and supported screen sizes. For APIs, verify validation, error behavior, authentication boundaries, and contract compatibility.
 - Apps own their source, CI, dependencies, instructions, and deploy configuration. Factory improvements should remain reusable without coupling app histories.
 - Version generic runtime installers, wrappers and checks as reviewable source, with private target data separate; document snapshot dependence versus empty-image bootstrap and verify fresh-task integrity. Follow [runtime standards](runtime.md).
-- Keep shared agent instructions single-source and entrypoints concise. Review client-specific instruction discovery/configuration and verify real loading separately; see [Codex/Claude Code compatibility](../docs/agent-compatibility.md).
+- Keep shared agent instructions single-source and entrypoints concise. Review client-specific instruction discovery/configuration and verify real loading separately; see [AI client compatibility](../docs/agent-compatibility.md).
