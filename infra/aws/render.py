@@ -7,6 +7,9 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts/lib"))
+from dns_records import name as dns_name, target as dns_target
 
 TAG_KEYS = ('project-id', 'environment', 'owner', 'managed-by', 'source-repo', 'source-commit',
             'created-by', 'created-at', 'creation-run-id', 'last-run-id', 'last-source-commit',
@@ -79,7 +82,7 @@ def iam_envelope(app_role, app_boundary):
     ]
 
 
-def dns_permissions(baseline):
+def dns_permissions(baseline, config=None):
     original = next(s for s in baseline['Statement'] if s.get('Sid') == 'CreateNamesInReservedFactoryNamespace')
     if (original.get('Effect') != 'Allow' or original.get('Action') != 'route53:ChangeResourceRecordSets'
             or not isinstance(original.get('Resource'), str)
@@ -103,7 +106,60 @@ def dns_permissions(baseline):
         'Null': {names: 'false'}})
     reads = statement(['route53:GetHostedZone', 'route53:ListResourceRecordSets', 'route53:GetChange'],
                       [original['Resource'], 'arn:aws:route53:::change/*'])
+    if config is not None:
+        required = {'mode', 'zone_id', 'zone_name', 'protected_record_names', 'release_protected_subtrees'}
+        if not isinstance(config, dict) or set(config) != required or config['mode'] != 'application-records-v1':
+            raise ValueError('Explicit application-records-v1 DNS configuration is required')
+        dns_target(config['zone_id'], config['zone_name'])
+        if (config['zone_name'] != suffix[1:] or original['Resource'] != 'arn:aws:route53:::hostedzone/' + config['zone_id']):
+            raise ValueError('DNS target must match the retained baseline zone and domain')
+        protected = config['protected_record_names']
+        released = config['release_protected_subtrees']
+        if (not isinstance(protected, list) or not protected or len(set(protected)) != len(protected)
+                or not isinstance(released, list) or len(set(released)) != len(released)):
+            raise ValueError('Provide explicit exact protected inventory and released baseline subtrees')
+        for value in protected:
+            if dns_name(value, record=True) != value or not (value == config['zone_name'] or value.endswith(suffix)):
+                raise ValueError('Protected DNS inventory must contain normalized exact in-zone names')
+        original_names = core['Condition']['ForAnyValue:StringLike'].get(names)
+        if (set(core['Condition']) != {'ForAnyValue:StringLike'}
+                or set(core['Condition']['ForAnyValue:StringLike']) != {names}
+                or not isinstance(original_names, list) or not original_names):
+            raise ValueError('Expected explicit original protected DNS names')
+        for value in original_names:
+            dns_name(value[2:] if value.startswith('*.') else value, record=True)
+            if '*' in value.removeprefix('*.') or '?' in value or not (value == config['zone_name'] or value.endswith(suffix)):
+                raise ValueError('Unrecognized retained DNS protection')
+        if (config['zone_name'] not in protected or any(value not in protected for value in original_names if not value.startswith('*.'))
+                or any(not isinstance(value, str) or not value.startswith('*.') or value not in original_names
+                       or value[2:] not in protected for value in released)):
+            raise ValueError('Retain all exact core names and explicitly acknowledge each released subtree with its protected parent')
+        # Deny literal wildcard records: Route53 normalizes '*' to the literal octal escape \052.
+        deny_names = sorted(set(protected + [value for value in original_names if value not in released] + [r'*\052*']))
+        core = statement('route53:ChangeResourceRecordSets', original['Resource'],
+                         {'ForAnyValue:StringLike': {names: deny_names}}, effect='Deny')
+        types = 'route53:ChangeResourceRecordSetsRecordTypes'
+        change = statement('route53:ChangeResourceRecordSets', original['Resource'], {
+            'ForAllValues:StringLike': {names: '*' + suffix},
+            'ForAllValues:StringNotEquals': {types: ['NS', 'SOA', 'DS']},
+            'Null': {names: 'false', types: 'false'}})
     return [reads, change, copy.deepcopy(core)]
+
+
+def boundary_dns(dns, config):
+    if config is None:
+        return copy.deepcopy(dns)
+    reads, change, core = copy.deepcopy(dns)
+    key = 'route53:ChangeResourceRecordSetsNormalizedRecordNames'
+    patterns = core['Condition']['ForAnyValue:StringLike'][key]
+    # The positive child-zone condition already excludes apex. Retained '*.' subtrees
+    # subsume exact children; preserve full private inventory and the explicit inline Deny.
+    exclusions = [value for value in patterns if value != config['zone_name'] and not any(
+        other.startswith('*.') and value != other and value.endswith(other[1:]) for other in patterns)]
+    change['Condition']['ForAllValues:StringNotLike'] = {key: exclusions}
+    # This is the only DNS Allow in each boundary; broad NotAction excludes all DNS.
+    # Excluding protected names here therefore has the same boundary ceiling as Deny.
+    return [reads, change]
 
 
 def delegation_guards(account, protected):
@@ -194,10 +250,10 @@ def render(config, baseline, boundary, bootstrap, trust):
         raise ValueError('Expected explicit account/IAM boundary guard')
     admin = copy.deepcopy(admin[0])
     admin['Action'].remove('iam:*')
-    dns = dns_permissions(baseline)
+    dns = dns_permissions(baseline, config.get('dns'))
     guards = delegation_guards(account, protected)
     broad = {'Effect': 'Allow', 'NotAction': ['route53:*', 'route53domains:*'], 'Resource': '*', 'Condition': context()}
-    allows = [broad, *dns]
+    allows = [broad, *boundary_dns(dns, config.get('dns'))]
     iam_guards = iam_envelope(app_role, app_boundary)
     # Resource vendors are literal and disjoint: the union cannot make an IAM ARN
     # exempt an engine action, or make an engine ARN exempt an IAM action.
@@ -334,7 +390,7 @@ def main():
     for name, policy in result.items():
         with os.fdopen(os.open(args.output / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
             stream.write(compact(policy) + b'\n')
-    review = dict(schema=2, renderer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    review = dict(schema=3, dns_contract=data['config'].get('dns', {'mode': 'retained-factory-namespace'}), renderer_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         input_sha256={key: hashlib.sha256(value.read_bytes()).hexdigest() for key, value in inputs.items()},
         policies={name: dict(chars=len(compact(policy)), sha256=hashlib.sha256(compact(policy)+b'\n').hexdigest()) for name, policy in result.items()},
         runner_managed_policy_count=data['config']['runner_managed_policy_count'],

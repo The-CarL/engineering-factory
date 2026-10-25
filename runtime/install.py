@@ -153,7 +153,7 @@ def install(destination):
         version([str(release / paths['gh']), '--version'], pins['gh']['version'], env)
         version([str(release / paths['aws']), '--version'], 'aws-cli/' + pins['aws']['version'], env)
         version([host['node'], str(release / paths['vercel']), '--version'], pins['vercel']['version'], env)
-        for name, script, mode in (('factory-project', 'project.py', []), ('factory-aws', 'aws.py', []), ('factory-gh', 'github.py', ['gh']),
+        for name, script, mode in (('factory-project', 'project.py', []), ('factory-dns', 'dns.py', []), ('factory-aws', 'aws.py', []), ('factory-gh', 'github.py', ['gh']),
                                    ('factory-git', 'github.py', ['git']), ('factory-vercel', 'vercel.py', [])):
             content = '#!' + host['python'] + '\nimport os,sys\nos.execv(' + repr(host['python']) + ', [' + repr(host['python']) + ', ' + repr(str(ROOT / 'scripts/runtime' / script)) + ', *' + repr(mode) + ', *sys.argv[1:]])\n'
             (release / 'bin' / name).write_text(content)

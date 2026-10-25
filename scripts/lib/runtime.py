@@ -67,7 +67,7 @@ def local_git(*args):
 
 def source_files():
     names = local_git('ls-files', '--cached', '--others', '--exclude-standard', '--',
-                      'runtime', 'scripts/runtime', 'scripts/lib/runtime.py', 'scripts/lib/provider.py', 'scripts/lib/context.py').splitlines()
+                      'runtime', 'scripts/runtime', 'scripts/lib/runtime.py', 'scripts/lib/provider.py', 'scripts/lib/context.py', 'scripts/lib/dns_records.py').splitlines()
     return sorted(set(names))
 
 
@@ -228,6 +228,8 @@ def write_environment(value, tools, project=None):
         if os.environ.get(name):
             values[name] = os.environ[name]
     values.update(project or {})
+    from dns_records import configured as dns_configured
+    values.update(dns_configured(dict(os.environ, **values)))
     text = marker + ''.join('export ' + key + '=' + shlex.quote(value) + '\n' for key, value in sorted(values.items()))
     if source == 'factory-token':
         text += '''# Resolve the binding only in the activated shell, never during generation.

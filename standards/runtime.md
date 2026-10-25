@@ -27,7 +27,7 @@ Classify failures separately: sandbox command or Unix-socket denial; network/egr
 
 The intended bootstrap identity is assume-only into exact approved roles, with no general service authority. Review its effective policy separately from the runtime role. Immediately verify the assumed role, account, region and session identity/expiry before service actions; reject unexpected principals or targets.
 
-Request the shortest supported, approved session and keep temporary credentials in memory or the required child environment. Do not write credential caches, persist sessions or pass secrets in argv. No broad-personal-credential or unrestricted raw-CLI fallback is allowed. A client request for 900 seconds is not a provider-enforced maximum; verify effective IAM, trust, boundary and session policies and the returned expiry separately. Wrapper command allowlists are not IAM boundaries. DNS record writes require separately scoped approval even when hosted-zone reads succeed.
+Request the shortest supported, approved session and keep temporary credentials in memory or the required child environment. Do not write credential caches, persist sessions or pass secrets in argv. No broad-personal-credential or unrestricted raw-CLI fallback is allowed. A client request for 900 seconds is not a provider-enforced maximum; verify effective IAM, trust, boundary and session policies and the returned expiry separately. Wrapper command allowlists are not IAM boundaries. DNS record writes require an established application DNS scope even when hosted-zone reads succeed; reuse existing authorization within that scope. Retain the explicit verified zone ID/name in the app registry and follow [application DNS](../docs/application-dns.md).
 
 ## Release evidence and recovery
 

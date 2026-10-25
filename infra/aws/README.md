@@ -36,7 +36,30 @@ Some APIs cannot establish target ownership with documented authorization keys. 
 
 `runner-dns-baseline.json` is the exact retained original, for rollback. `runner-dns-policy.json` is the proposed replacement, **not** the original policy plus another Allow. Keeping the original CREATE-only/outside-namespace Denies active would block the new contract.
 
-The replacement permits provider-valid record types and CREATE/UPSERT/DELETE in the exact approved hosted zone for `factory-<scope>-r-*.<approved-domain>` and its children. This includes ACM `_hash` validation and normalized wildcard records within an app's namespace, plus app-owned NS/DS delegation. A `ForAllValues` name check and explicit missing-name guard reject the entire mixed batch if any name is outside scope. Original exact core-name/subtree Denies remain. Apex, other projects/environments, other zones and zone/domain administration have no grant. The same DNS envelope is inside every deployed boundary so an IaC role can manage app DNS without gaining core control. This intentionally changes the earlier CREATE-only/type-limited policy; review these semantics explicitly before activation. No core DNS record is mutated to test a denial.
+Without a `dns` configuration, the renderer retains the previous factory-prefixed name contract and original subtree protections. Upgrading source alone does not release any reserved subtree. The opt-in application contract supports human-readable application names in the same exact approved public zone:
+
+```json
+{
+  "dns": {
+    "mode": "application-records-v1",
+    "zone_id": "ZAPPROVEDZONE",
+    "zone_name": "example.test",
+    "protected_record_names": [
+      "example.test", "core.example.test", "www.example.test",
+      "_acme-challenge.example.test", "_acme-challenge.core.example.test"
+    ],
+    "release_protected_subtrees": ["*.core.example.test"]
+  }
+}
+```
+
+This is an addition to the private configuration above, not a complete config. The target must match the retained original zone/domain. Inventory actual core records and supporting certificate/domain-verification labels before activation. All original exact protected names must remain. Each released wildcard must be an original protected subtree whose parent remains exactly protected; omission retains that subtree. Add supporting names explicitly; the renderer cannot discover future hashed validation labels. Keep that inventory current when core DNS changes. The original inputs and `runner-dns-baseline.json` remain immutable rollback evidence.
+
+The opt-in grant permits CREATE/UPSERT/DELETE for children of the approved zone outside that protected inventory. It never grants apex changes, other zones, NS/SOA/DS mutations, literal wildcard records, hosted-zone administration or registrar operations. Other provider-valid record types remain available. An all-values name/type check rejects an entire mixed batch containing a protected/out-of-zone name or a prohibited type. Missing name/type context fails closed. Exact parent protection does not reserve every child; a new application child can be permitted while its core parent stays protected. Route53 normalizes wildcard `*` as literal `\052`; the policy rejects that escape anywhere in a requested record name.
+
+The inline DNS policy retains an explicit core-name Deny. To fit AWS's 6,144-character managed-policy limit without dropping any non-DNS guard, runner and delegated boundaries express equivalent core exclusion inside their **sole DNS Allow**, using `ForAllValues:StringNotLike`. Their broad `NotAction` grant excludes all Route53/domain actions. Therefore an additional identity Allow cannot reopen a protected name through either boundary. Positive child-zone matching already excludes apex; exact protected names covered by retained subtree patterns are deduplicated only in this boundary condition. The complete inventory remains in configuration and the inline denial. Review this complete identity/boundary combination, not an isolated Allow. The renderer fails before output when any document exceeds quota; added protected names may require a reviewed representation change.
+
+Set private `FACTORY_AWS_DNS_ZONE_ID` and `FACTORY_AWS_DNS_ZONE_NAME` together in the reusable environment and retain them in the selected app's registry. Verify their public-zone pairing using `GetHostedZone`; do not require account-wide hosted-zone discovery. See [application DNS operations](../../docs/application-dns.md) for CREATE-first tooling, readback, ownership and cleanup. Route53 records do not support per-record project tag enforcement. Permitted application records share a DNS write envelope: project ownership remains an operational inventory check, not an IAM guarantee. No core record is mutated to test a denial.
 
 ## What the profile cannot guarantee
 
@@ -45,7 +68,7 @@ A shared-account broad service grant is not universal new-resources-only ABAC. A
 ## Administrator activation and acceptance
 
 1. Compare the current policies/trust with retained originals; inspect protected/privileged resource inventory, service-linked roles, existing Auto Scaling groups/launch templates, factory-path role boundaries and discovery coverage. Protect sensitive data and indirect execution, not just deletions. Confirm actual managed-policy attachment and version quotas.
-2. Validate all documents with Access Analyzer (`IDENTITY_POLICY`; trust uses `RESOURCE_POLICY` / `AWS::IAM::AssumeRolePolicyDocument`). Simulate complete identity + boundary combinations for runner, bootstrap and delegated roles. Cover normal cross-service creation/IaC, wrong/missing boundary, central-policy edits, core/other-project resources, stored-role CloudFormation, wrong ECS cluster, scope overrides/missing tags, expiry/TLS, and DNS own CREATE/UPSERT/DELETE/ACM children versus core/other-project/mixed batches.
+2. Validate all documents with Access Analyzer (`IDENTITY_POLICY`; trust uses `RESOURCE_POLICY` / `AWS::IAM::AssumeRolePolicyDocument`). Simulate complete identity + boundary combinations for runner, bootstrap and delegated roles. Cover normal cross-service creation/IaC, wrong/missing boundary, central-policy edits, core/other-project resources, stored-role CloudFormation, wrong ECS cluster, scope overrides/missing tags, expiry/TLS, and the selected DNS contract: permitted application CREATE/UPSERT/DELETE/validation children versus exact core/supporting names, retained subtrees, other zones, NS/SOA/DS, wildcards and mixed batches.
    Broad `NotAction` grants can produce PassRole/service-linked-role analyzer warnings. Review the complete explicit IAM path Deny and fixed boundary together: a grant alone is unsafe; reserved service-linked-role paths are outside the envelope. Retain warning findings and the effective-policy rationale rather than claiming zero findings.
 3. Confirm actual service context and STS scope equality/override behavior. Simulator limitations for literal IAM `${*}`, `${?}` and `${$}` must remain explicit; do not label substitute tests as exact-policy proof. [IAM defaults and negative comparisons](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html) explain the fail-closed scope guard. `sts:*` denies session elevation; [GetCallerIdentity still requires no permission even under explicit denial](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetCallerIdentity.html).
 4. Review the exact policy diff and activation order. Install the fixed app boundary/provisioner policy and **one** runner identity managed policy (`runner-app-1.json`), replace the runner boundary and DNS inline policy, then update bootstrap/trust. Boundary changes apply before grants. Keep current versions and original attachments for rollback; never expose a temporary allow-only configuration. Apply full factory provenance to these control-plane artifacts too.

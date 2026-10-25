@@ -161,6 +161,27 @@ class RuntimeTests(unittest.TestCase):
             self.execute_aws([str(executable)], execute=True)
         self.assertEqual(self.calls, [])
 
+    def test_dns_zone_pair_forwarded_to_native_and_trusted_exec_without_other_secrets(self):
+        zone = dict(FACTORY_AWS_DNS_ZONE_ID='ZEXAMPLE', FACTORY_AWS_DNS_ZONE_NAME='example.test')
+        os.environ.update(zone)
+        self.execute_aws(['route53', 'get-hosted-zone', '--id', 'ZEXAMPLE'])
+        self.assertTrue(all(self.calls[-1][1].get(key) == value for key, value in zone.items()))
+        self.record.unlink(); self.output.unlink()
+        executable = self.private / 'trusted-dns-tool'
+        executable.write_text('reviewed executable')
+        os.environ.update(FACTORY_AWS_EXECUTABLE=str(executable), FACTORY_AWS_EXECUTABLE_SHA256=guard.digest(executable.read_bytes()))
+        self.execute_aws([str(executable), 'plan'], execute=True)
+        self.assertTrue(all(self.calls[-1][1].get(key) == value for key, value in zone.items()))
+        self.assertNotIn('VERCEL_TOKEN', self.calls[-1][1])
+
+    def test_incomplete_or_invalid_dns_zone_config_stops_before_assume_role(self):
+        for values in (dict(FACTORY_AWS_DNS_ZONE_ID='ZEXAMPLE'),
+                       dict(FACTORY_AWS_DNS_ZONE_ID='ZEXAMPLE', FACTORY_AWS_DNS_ZONE_NAME='*.example.test')):
+            with patch.dict(os.environ, values), self.assertRaises(ValueError):
+                self.execute_aws(['route53', 'get-hosted-zone', '--id', 'ZEXAMPLE'])
+            self.assertFalse(self.calls)
+            self.assertFalse(self.record.exists())
+
     def test_credentials_in_child_response_are_withheld_no_stdout_or_disk(self):
         def leak(command, env, provider, **kwargs):
             result = self.aws_run(command, env, provider, **kwargs)

@@ -40,6 +40,10 @@ Populate both original and latest fields on creation. Preserve original creation
 - Restrict tagging/untagging APIs so the factory cannot tag core/existing assets to claim ownership, transfer project ownership, or change/remove protected ownership and original-attribution tags. Policies must also enforce resource namespaces and action/resource/region allowlists; request tags alone are insufficient.
 - Inspect the resulting provider tags and all child resources after apply. A successful IaC command or a tag in a plan is not readback evidence. See [AWS tag authorization](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_tags.html) and [infrastructure boundaries](infrastructure.md).
 
+## DNS records
+
+Route53 records have no individual project tags or provider-enforced ownership based on repository inventory. Record the exact public-zone ID/name and record name/type/values/TTL, creation versus reuse, original project/environment/source/run, native change ID, status and before/after readback in this app's approved private inventory. Keep the zone pair in its private registry and preserve historical receipts. A matching existing record is external until explicitly adopted; never assign ownership from a suffix or a successful read. The DNS IAM contract protects core names, allowed zone/types and retained subtrees, not boundaries between otherwise permitted app records. Follow [application DNS](../docs/application-dns.md) for CREATE-first planning, reconciliation and exact owned-record cleanup.
+
 ## Vercel deployment paths
 
 Resolve and record the exact team and project IDs, project name/alias and environment before each write. Associate the Vercel project with the stable factory project ID in the private project record; do not confuse it with Vercel's own project ID.

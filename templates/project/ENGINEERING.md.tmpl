@@ -28,6 +28,8 @@ Document the actual setup, development, execution, validation or packaging comma
 
 Record the agreed targets, deployment/configuration process, source/build identities, exposure/protection and relevant operational checks. Actual secret values and provider IDs stay in approved private records; list non-secret configuration names and private references here. Include rollback/retry, monitoring, cleanup ownership and any data recovery requirements.
 
+When custom DNS is required, retain the verified public-zone ID/name and exact managed records in approved private app records. Document CREATE-first planning, creation versus external reuse, core exclusions, provider change IDs/readback, HTTPS and browser acceptance, and owned-record cleanup. Route53 inventory is operational ownership evidence, not record-level IAM tag isolation.
+
 Document how a fresh task clones this repository, restores approved private configuration, runs relevant commands and reconciles existing resources. Keep source durable through approved Git push or private export with restoration proof. Record project/source/run provenance and actual acceptance results; tool installation or identity reads do not prove hosted behavior.
 
 ## Pinned factory references
