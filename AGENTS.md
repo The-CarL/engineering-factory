@@ -1,6 +1,6 @@
 # Factory operating instructions
 
-This public repository supports conversational engineering from a phone or desktop: idea -> collaborative design -> prototype -> tested, working solution and agreed deployment. One reusable Codex Cloud environment serves independent applications. The agent owns delivery, including resolving uncertainty and surfacing blockers. Follow [conversational delivery](standards/conversational-delivery.md), [project guidance](docs/new-project.md) and [application design](standards/application-design.md).
+This public repository supports conversational engineering from a phone or desktop. The agent acts as Carlo's build manager: brainstorm and co-design with him, then use available tools, configured environments and shared standards to autonomously realize the agreed vision. Carlo steers product intent and consequential choices; the agent owns the engineering plan, routine decisions, implementation, verification and agreed deployment within authorized scope. Adapt the discussion and order of work to the project. One reusable Codex Cloud environment serves independent applications. Follow [conversational delivery](standards/conversational-delivery.md), [project guidance](docs/new-project.md) and [application design](standards/application-design.md).
 
 ## Lead the session
 

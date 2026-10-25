@@ -1,6 +1,6 @@
 # Application design and operation
 
-Choose architecture from the product's users, behavior, constraints and operating needs. Define the outcome and acceptance criteria before selecting components. Use a suitable supported stack and provider; a project may be a static site, frontend, API/service, full-stack app, worker/job or another workload. Components and verification apply when relevant to that product.
+Choose architecture from the product's users, behavior, constraints and operating needs. Define the outcome and acceptance criteria before selecting components. Use a suitable supported stack and provider; a project may be a static site, frontend, API/service, full-stack app, worker/job or another workload. Choose each component's hosting and any DNS approach during codesign, recording intentionally deferred choices and their triggers. Vercel can host a frontend when the design calls for it; AWS or another approved provider can also do so. Available integrations do not dictate the architecture. Components and verification apply when relevant to that product.
 
 ## Architecture and boundaries
 
