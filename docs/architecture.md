@@ -30,3 +30,7 @@ A private project record maps stable identity to exact repository/provider/deplo
 A published factory environment supplies reusable setup. A fresh task/actor may receive a fresh VM; make app source durable via authorized Git push/private export and verify restoration. A later task uses the same environment, clones the exact app, reads its operating contract and reconciles private resource/recovery references.
 
 [Runtime standards](../standards/runtime.md) distinguish save/publication/fresh-instance acceptance. Verify the environment capabilities actually claimed with authorized representative operations; keep each provider transport and permission result separate. App acceptance verifies its own workload and operating contract, independently of factory checks. Keep operator-specific failures and private inventory out of public source. See [setup](setup.md) and [phone operation](mobile-workflow.md).
+
+## Design rationale and history
+
+The [decision register](design/README.md) preserves the agreed factory direction and clearly marks proposed/deferred changes. The [history index](history/README.md) records the GitHub credential-routing and repository-protection investigations, Cloud execution/runtime failures, AWS/DNS lessons, and the first full application lifecycle. It separates reported live outcomes, inspected source fixes, unverified activation and unresolved work. App-specific inventories and raw evidence remain in app-owned approved records.
