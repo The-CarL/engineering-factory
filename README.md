@@ -44,7 +44,7 @@ Factory checks establish offline behavior. Accept the environment capabilities a
 ## Operating references
 
 - [Setup and local helpers](docs/setup.md), [architecture](docs/architecture.md) and [phone operation](docs/mobile-workflow.md)
-- [Conversational delivery](standards/conversational-delivery.md), [application design](standards/application-design.md), [bounded work](standards/bounded-runs.md) and [provider contracts](docs/provider-workflows.md)
+- [Conversational delivery](standards/conversational-delivery.md), [application design](standards/application-design.md), [personal-site/Forge design references](docs/design-references.md), [bounded work](standards/bounded-runs.md) and [provider contracts](docs/provider-workflows.md)
 - [Runtime installation and provider commands](docs/runtime-commands.md), [tool pins](runtime/pins.json) and [names-only Codex Cloud binding example](runtime/environment.example.json)
 - [Security model](docs/security-model.md), [provider access design](docs/access-matrix.md) and [credential gate](docs/credential-checklist.md)
 - [Project ownership/provenance](standards/provenance.md), [shared agent rules](AGENTS.md) and [AI client compatibility](docs/agent-compatibility.md) and [execution hosts](docs/execution-hosts.md)
