@@ -132,7 +132,8 @@ def git_command(tools, env, args, target):
         app_identity(tools, app, target)
     origin = run([*common, '-C', str(app), 'remote', 'get-url', '--all', 'origin'], env, 'GitHub').decode().strip()
     push = run([*common, '-C', str(app), 'remote', 'get-url', '--push', '--all', 'origin'], env, 'GitHub').decode().strip()
-    require(origin in ('https://github.com/' + target, 'https://github.com/' + target + '.git') and push == origin,
+    require(origin.lower() in ('https://github.com/' + target, 'https://github.com/' + target + '.git')
+            and push.lower() == origin.lower(),
             'App HTTPS fetch/push origin mismatch')
     require(run([*common, '-C', str(app), 'rev-parse', '--show-toplevel'], env, 'GitHub').decode().strip() == str(app), 'App Git root mismatch')
     config = run([*common, '-C', str(app), 'config', '--name-only', '--list'], env, 'GitHub').decode().lower()

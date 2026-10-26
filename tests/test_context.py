@@ -378,6 +378,7 @@ class ContextTests(unittest.TestCase):
         work = self.root / 'feature-worktree'
         self.git_run('-C', str(self.app), 'worktree', 'add', '-b', 'feature', str(work))
         self.assertTrue((work / '.git').is_file())
+        self.git_run('-C', str(self.app), 'remote', 'set-url', 'origin', 'https://github.com/Fixture-Owner/App.git')
         os.environ['FACTORY_PROJECT_APP'] = str(work)
         context.checkpoint(self.target, work, tools=self.tools)
         self.git_run('-C', str(work), 'add', '.factory')
