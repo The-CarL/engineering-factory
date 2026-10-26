@@ -22,6 +22,7 @@ CONFIG = {
     'FACTORY_VERCEL_TEAM_ID': r'team_[A-Za-z0-9]+',
     'FACTORY_VERCEL_TEAM_SLUG': r'[A-Za-z0-9][A-Za-z0-9-]{0,99}',
     'VERCEL_PROJECT_ID': r'prj_[A-Za-z0-9]+',
+    'VERCEL_ORG_ID': r'team_[A-Za-z0-9]+',
     'FACTORY_AWS_ACCOUNT_ID': r'[0-9]{12}',
     'FACTORY_AWS_ROLE_NAME': r'[A-Za-z0-9+=,.@_-]{1,64}',
     'FACTORY_AWS_DNS_ZONE_ID': r'Z[A-Z0-9]{1,63}',
@@ -148,8 +149,14 @@ def inventory(data, expected):
         require(isinstance(item, dict) and fields <= set(item) <= fields | {'url'}, 'Invalid inventory resource fields')
         provider, identity = item['provider'], item['resource_id']
         require(provider in ('AWS', 'Vercel', 'GitHub') and isinstance(identity, str) and len(identity) <= 1024, 'Invalid inventory provider/ID')
-        pattern = {'AWS': r'(?:arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]*:[A-Za-z0-9_./:@+=,-]+|[A-Za-z0-9][A-Za-z0-9_.-]{0,255})',
+        pattern = {'AWS': r'(?:arn:aws:[a-z0-9-]+:[a-z0-9-]*:[0-9]*:[A-Za-z0-9_.$!/:@+=,-]+|[A-Za-z0-9$][A-Za-z0-9_.$!/:@+=,-]{0,511})',
                    'Vercel': r'(?:prj|dpl|team)_[A-Za-z0-9]+', 'GitHub': REPO}[provider]
+        if provider == 'Vercel' and isinstance(item['resource_type'], str):
+            kind = item['resource_type'].lower().split(':')[-1]
+            if kind == 'domain':
+                pattern = r'(?=.{1,253}\Z)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
+            elif kind == 'certificate':
+                pattern = r'[A-Za-z0-9][A-Za-z0-9_-]{0,255}'
         require(re.fullmatch(pattern, identity) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:/-]{0,99}', item['resource_type'])
                 and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,127}', item['run_id'])
                 and re.fullmatch(r'[a-f0-9]{40}', item['source_commit'])
@@ -186,6 +193,9 @@ def record(value):
     require(isinstance(value['config'], dict) and set(value['config']) <= set(CONFIG), 'Context cannot supply credentials or executable configuration')
     for key, selected in value['config'].items():
         require(isinstance(selected, str) and re.fullmatch(CONFIG[key], selected), 'Invalid provider target configuration')
+    require(not (value['config'].get('VERCEL_ORG_ID') and value['config'].get('FACTORY_VERCEL_TEAM_ID'))
+            or value['config']['VERCEL_ORG_ID'] == value['config']['FACTORY_VERCEL_TEAM_ID'],
+            'Vercel CLI organization differs from selected team')
     from dns_records import configured as dns_configured
     dns_configured(value['config'])
     require(value['config'].get('FACTORY_GITHUB_OWNER', '').lower() == value['repository'].split('/')[0], 'Context repository owner mismatch')
@@ -205,18 +215,24 @@ def record(value):
 def app_identity(tools, app, target):
     require(app.is_absolute() and '..' not in app.parts and not any(p.is_symlink() for p in (app, *app.parents))
             and app != ROOT and not ROOT.is_relative_to(app), 'Invalid independent app path')
-    require((app / '.git').is_dir() and not (app / '.git').is_symlink()
-            and not (app / '.git/objects/info/alternates').exists(), 'App must be an independent clone')
+    marker = app / '.git'
+    require((marker.is_dir() or marker.is_file()) and not marker.is_symlink(),
+            'App must be a Git checkout with regular metadata')
     def git(*args, optional=False):
         result = subprocess.run([tools['git'], '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
                                  '-C', str(app), *args], env=base_env('/tmp'), capture_output=True, timeout=30)
         require(optional or result.returncode == 0, 'Local app identity cannot be verified')
         return result.stdout.decode().strip() if result.returncode == 0 else None
     require(git('rev-parse', '--show-toplevel') == str(app), 'App path differs from Git root')
+    common = Path(git('rev-parse', '--path-format=absolute', '--git-common-dir'))
+    require(common.is_absolute() and common.is_dir() and common == common.resolve()
+            and not any(p.is_symlink() for p in (common, *common.parents))
+            and not (common / 'objects/info/alternates').exists(), 'App Git storage must be canonical and self-contained')
+    require(not git('rev-parse', '--show-superproject-working-tree'), 'App cannot be a submodule')
     allowed = ('https://github.com/' + target, 'https://github.com/' + target + '.git', 'git@github.com:' + target + '.git')
     require(git('remote', 'get-url', '--all', 'origin').lower() in allowed
             and git('remote', 'get-url', '--push', '--all', 'origin').lower() in allowed, 'App origin differs from selected context')
-    keys = git('config', '--local', '--name-only', '--list').lower().splitlines()
+    keys = git('config', '--name-only', '--list').lower().splitlines()
     require(not any('extraheader' in key or key.startswith('url.') for key in keys), 'Review app Git URL/auth overrides privately')
     branch = git('symbolic-ref', '--short', 'HEAD')
     require(re.fullmatch(BRANCH, branch) and '..' not in branch, 'App requires a normal selected branch')
@@ -236,6 +252,10 @@ def configured():
 def values(data, app):
     result = dict(data['config'], FACTORY_PROJECT_ID=data['project_id'], FACTORY_ENVIRONMENT=data['environment'],
                   FACTORY_PROJECT_REPOSITORY=data['repository'], FACTORY_PROJECT_APP=str(app))
+    if result.get('VERCEL_PROJECT_ID') and result.get('FACTORY_VERCEL_TEAM_ID'):
+        require(result.get('VERCEL_ORG_ID', result['FACTORY_VERCEL_TEAM_ID']) == result['FACTORY_VERCEL_TEAM_ID'],
+                'Vercel CLI organization differs from selected team')
+        result['VERCEL_ORG_ID'] = result['FACTORY_VERCEL_TEAM_ID']
     for key, expected in result.items():
         if key == 'FACTORY_AWS_REGION' and os.environ.get(key):
             require(re.fullmatch(CONFIG[key], os.environ[key]), 'Invalid explicit AWS region override')
@@ -262,8 +282,15 @@ def atomic(path, content, mode):
 
 
 @contextmanager
-def locked(app):
-    path = app / '.git/factory-registry.lock'
+def locked(app, tools):
+    result = subprocess.run([tools['git'], '-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false',
+        '-C', str(app), 'rev-parse', '--path-format=absolute', '--git-common-dir'],
+        env=base_env('/tmp'), capture_output=True, timeout=30)
+    require(result.returncode == 0, 'Registry lock Git storage cannot be verified')
+    common = Path(result.stdout.decode().strip())
+    require(common.is_absolute() and common.is_dir() and common == common.resolve()
+            and not any(p.is_symlink() for p in (common, *common.parents)), 'Unsafe registry lock path')
+    path = common / 'factory-registry.lock'
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), 0o600)
     try:
         os.close(descriptor)
@@ -430,7 +457,7 @@ def checkpoint(target, app=None, additions=(), initialize=False, environment=Non
     with Project(tools, target, app) as project:
         project.verify()
         branch, commit = app_identity(tools, app, target)
-        with locked(app):
+        with locked(app, tools):
             data, contents = project.read()
             if data is None:
                 require(initialize and environment, 'App registry missing; initialize this verified app explicitly')
@@ -519,7 +546,7 @@ def automatic(record_path, ownership=None):
     data = record(json.loads(folder.read_bytes()))
     require(data['repository'] == target, 'Selected registry belongs to another app')
     values(data, app)
-    with locked(app):
+    with locked(app, tools):
         queued = pending(data)
         temporary = dict(data, artifacts=dict(queued), publication='private')
         contents = {name: read_private(Path(os.environ['FACTORY_PRIVATE_ROOT']) / relative(name)) for name in queued}

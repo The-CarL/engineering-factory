@@ -6,6 +6,8 @@ Use the versioned [runtime command paths](runtime-commands.md) for general provi
 
 Use [project guidance](new-project.md) and [bounded project work](../standards/bounded-runs.md) to agree applicable consequential scope and execute routine work with minimal interactions. Select provider operations from the app's needs, include resource/budget limits and any chat-recipient authority, and preserve provider permissions/platform approvals.
 
+See the [toolbox](toolbox.md) for provider responsibilities, native CLI/connector selection, Vercel organization/project pairing and Forge publication. Use the known exact DNS zone instead of requiring account-wide discovery.
+
 ## GitHub existing-repository onboarding and recovery
 
 `plan-repo.sh` prints the approved owner/name, private-by-default visibility, description, empty-repository setup choices and expected unverified URL for Carlo. It is offline and writes nothing. Carlo supplies an existing repository or creates it manually, then returns its URL. `create-repo.sh` is a legacy alias for this brief; it never creates or clones, including when invoked with legacy `--confirm` flags.

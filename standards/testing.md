@@ -1,5 +1,6 @@
 # Testing
 
+- Fixtures must not supply application behavior missing from the deployed handler. For browser/API integrations, exercise the real handler for preflight, routing, errors and retry behavior; a fixture must not answer those requests on its behalf. Verify the hosted request path separately, with an independent datastore read when needed to prove persistence.
 - Test observable behavior and meaningful failure modes. Use unit tests for logic, isolated integration tests for tool/API boundaries, and end-to-end tests for critical user journeys.
 - No live provider writes, paid resources, real credentials, or global auth stores in ordinary tests. Mock CLIs, isolate HOME/config, and fail on unexpected calls. Verify that dry-run and failure paths make no mutations.
 - Cover wrong identity/target, expired auth/network errors, interrupted work, retries, visibility, local checkout/origin mismatches, and preservation of existing files for automation scripts.

@@ -124,13 +124,19 @@ def git_command(tools, env, args, target):
     if args.action == 'clone':
         require(not app.exists() and app.parent.is_dir(), 'Clone destination must be absent; inspect existing work separately')
         return [*common, 'clone', 'https://github.com/' + target + '.git', str(app)], None
-    require(app.is_dir() and (app / '.git').is_dir() and not (app / '.git').is_symlink(), 'App must be an independent clone')
+    marker = app / '.git'
+    require(app.is_dir() and (marker.is_dir() or marker.is_file()) and not marker.is_symlink(),
+            'App must be a Git checkout with regular metadata')
+    if marker.is_file():
+        from context import app_identity
+        app_identity(tools, app, target)
     origin = run([*common, '-C', str(app), 'remote', 'get-url', '--all', 'origin'], env, 'GitHub').decode().strip()
     push = run([*common, '-C', str(app), 'remote', 'get-url', '--push', '--all', 'origin'], env, 'GitHub').decode().strip()
-    require(origin in ('https://github.com/' + target, 'https://github.com/' + target + '.git') and push == origin,
+    require(origin.lower() in ('https://github.com/' + target, 'https://github.com/' + target + '.git')
+            and push.lower() == origin.lower(),
             'App HTTPS fetch/push origin mismatch')
     require(run([*common, '-C', str(app), 'rev-parse', '--show-toplevel'], env, 'GitHub').decode().strip() == str(app), 'App Git root mismatch')
-    config = run([*common, '-C', str(app), 'config', '--local', '--name-only', '--list'], env, 'GitHub').decode().lower()
+    config = run([*common, '-C', str(app), 'config', '--name-only', '--list'], env, 'GitHub').decode().lower()
     require(not any('extraheader' in key or key.startswith('url.') for key in config.splitlines()), 'Review local Git URL/auth header overrides privately')
     require(args.branch, 'Push/fetch requires an exact branch')
     run([*common, 'check-ref-format', '--branch', args.branch], env, 'GitHub')

@@ -16,6 +16,8 @@ The command verifies source, prepares pinned Node/npm and provider tools from a 
 
 ## Available capabilities
 
+See the [toolbox](docs/toolbox.md) for what GitHub, Vercel, AWS and Forge provide and how to select their tools/targets. Use [cleanup standards](standards/cleanup.md) for a detailed plan that Carlo reviews and approves before execution.
+
 | Capability | Helper / ownership |
 |---|---|
 | App repository onboarding | `plan-repo.sh` prints a manual creation brief for Carlo; `clone-repo.sh` verifies and clones an existing repository. Private by default; no automatic repository creation. |
