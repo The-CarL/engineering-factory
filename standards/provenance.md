@@ -20,7 +20,7 @@ Use this versioned mapping where the provider supports tags or deployment metada
 | Environment | `factory:environment` | `factoryEnvironment` |
 | Responsible owner alias | `factory:owner` | `factoryOwner` |
 | Manager, value `engineering-factory` | `factory:managed-by` | `factoryManagedBy` |
-| Source repository alias | `factory:source-repo` | `factorySourceRepo` |
+| Original readable source repository, `OWNER/REPO` | `factory:source-repo` | `factorySourceRepo` |
 | Exact creation source commit | `factory:source-commit` | `factorySourceCommit` |
 | Creation actor/role alias | `factory:created-by` | `factoryCreatedBy` |
 | Original creation time | `factory:created-at` | `factoryCreatedAt` |
@@ -28,9 +28,32 @@ Use this versioned mapping where the provider supports tags or deployment metada
 | Most recent change operation ID | `factory:last-run-id` | `factoryLastRunId` |
 | Exact most recent change commit | `factory:last-source-commit` | `factoryLastSourceCommit` |
 | Schema version, initially `1` | `factory:provenance-version` | `factoryProvenanceVersion` |
-| Expiry for temporary resources | `factory:expires-at` | `factoryExpiresAt` |
+| Expiry for temporary resources; `none` for approved nonexpiring retention | `factory:expires-at` | `factoryExpiresAt` |
 
 Populate both original and latest fields on creation. Preserve original creation attribution on updates; append later actor/time/commit events to the private inventory. Update latest fields only for the resources actually changed. Do not inject a new run/commit globally through IaC default tags and thereby modify unrelated resources. An existing provider object must not be relabeled as newly created. Adoption needs separate explicit authorization and an event preserving its known history and any unknown fields.
+
+## Readable project, repository and source labels
+
+New resources also carry these six readable fields. This is an additive extension of provenance version `1`; retain the original 13 fields and stable UUID/security scope. Readers accept the exact legacy core or the complete 19-field mapping, so historical receipts and journals remain readable without rewriting their bytes.
+
+| Meaning | AWS resource tag | Vercel deployment metadata |
+|---|---|---|
+| Current approved project display name | `factory:project-name` | `factoryProjectName` |
+| Original repository short name, derived from `factory:source-repo` | `factory:repo-name` | `factoryRepoName` |
+| Original source branch/ref display label | `factory:source-branch` | `factorySourceBranch` |
+| Original commit author display name or approved alias | `factory:source-author` | `factorySourceAuthor` |
+| Latest change source branch/ref display label | `factory:last-source-branch` | `factoryLastSourceBranch` |
+| Latest change commit author display name or approved alias | `factory:last-source-author` | `factoryLastSourceAuthor` |
+
+For example, a resource can show project `Example Notes`, source repo `example-owner/notes-app`, repo name `notes-app`, source branch `feat/first-release` and source author `Alex Example`, alongside its stable project UUID and exact commits. `factory:owner` remains the responsible owner; `factory:created-by` remains the actual execution actor/role alias. A commit author can differ from both and is self-asserted Git attribution, not proof of a human identity or provider authorization.
+
+Populate original/latest branch and author together on creation. Preserve original repo name, branch and author on subsequent resource changes; update latest fields only for affected resources. The project display label can change under an agreed rename without changing the UUID. Preserve old repository/source attribution and record any rename mapping in the app's approved records.
+
+Derive labels from verified source or approved nonsecret context, using [the offline metadata helper](../docs/provenance-metadata.md). Detached HEAD is `detached` unless a verified ref is supplied as an explicit display alias. Do not infer historical branch/author facts from the current checkout: keep unavailable original facts as `unknown`, or backfill only from established evidence. Metadata enrichment does not authorize adopting/retagging unrelated resources or rewriting original ownership receipts.
+
+Values are bounded to 256 characters and must be suitable for the target service. Keep approved names/handles readable, including spaces where supported; exclude personal emails, credential values, URLs and control characters. Use explicit safe display aliases if a branch/name cannot be represented rather than silently truncating it; retain the mapping privately. Metadata can be visible to provider users and must not carry sensitive business details.
+
+These six labels are required by the new-resource acceptance standard; they are not added to the four STS session keys or the IAM creation conditions. The default IAM profile retains its existing core-tag requirements. Verify readable fields through resource/deployment readback and app records; do not claim universal IAM enforcement or automatic child propagation.
 
 ## AWS creation and ownership
 

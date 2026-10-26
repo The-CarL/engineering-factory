@@ -15,9 +15,43 @@ METADATA = ("factoryProjectId", "factoryEnvironment", "factoryOwner", "factoryMa
             "factoryCreationRunId", "factoryLastRunId", "factoryLastSourceCommit",
             "factoryProvenanceVersion", "factoryExpiresAt")
 
+# Additive v1 extension; old journals/receipts keep their original bytes.
+READABLE_METADATA = ("factoryProjectName", "factoryRepoName", "factorySourceBranch",
+                     "factorySourceAuthor", "factoryLastSourceBranch", "factoryLastSourceAuthor")
+CREATION_METADATA = ("factorySourceRepo", "factorySourceCommit", "factoryCreatedBy",
+                     "factoryCreatedAt", "factoryCreationRunId",
+                     "factoryRepoName", "factorySourceBranch", "factorySourceAuthor")
+
 
 class ProviderError(Exception):
     """Contains only a fixed classification and allowlisted diagnostic fields."""
+
+
+def validate_metadata_shape(meta):
+    """Accept the exact legacy core or complete readable extension; no arbitrary keys."""
+    core, readable = set(METADATA), set(READABLE_METADATA)
+    if not isinstance(meta, dict) or set(meta) not in (core, core | readable):
+        raise ProviderError("Provide canonical provenance with either no readable extension or all six readable fields")
+    if readable <= set(meta):
+        for key in READABLE_METADATA:
+            value = meta[key]
+            if not (isinstance(value, str) and 0 < len(value) <= 256 and value == value.strip()
+                    and all(c.isalnum() or c in " ._:/=+-@" for c in value)
+                    and "://" not in value and not re.search(r"[^ ]+@[^ ]+\.[^ ]+", value)):
+                raise ProviderError("Use bounded nonsecret readable labels without email addresses, URLs or control characters")
+        repo = meta.get("factorySourceRepo")
+        if not isinstance(repo, str) or meta["factoryRepoName"] != repo.rsplit("/", 1)[-1]:
+            raise ProviderError("Readable repository name must match the original source repository")
+    return meta
+
+
+def preserve_creation_metadata(meta, previous):
+    """Never drop/rewrite known original attribution, including readable snapshots."""
+    if not isinstance(previous, dict):
+        raise ProviderError("Original creation attribution is unavailable")
+    for key in CREATION_METADATA:
+        if (key in METADATA or key in previous) and meta.get(key) != previous.get(key):
+            raise ProviderError("Updates must preserve original creation attribution")
 
 
 # Never echo arbitrary provider messages, codes, headers, URLs, or exception text.

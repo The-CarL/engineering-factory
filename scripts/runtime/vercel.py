@@ -8,15 +8,16 @@ import re
 import sys
 import uuid
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'lib'))
-from provider import METADATA, Vercel
+from provider import Vercel, preserve_creation_metadata, validate_metadata_shape
 from runtime import Operation, Parser, cli, digest, event, known_credentials, load, private_path, read_private, require, valid_environment
 
 
 def provenance(path):
     require(path, 'Mutations require a private canonical provenance record')
     meta = json.loads(read_private(path))
-    require(isinstance(meta, dict) and set(meta) == set(METADATA)
-            and all(isinstance(value, str) and 0 < len(value) <= 256 for value in meta.values()), 'Provide exactly the 13 canonical provenance fields')
+    validate_metadata_shape(meta)
+    require(all(isinstance(value, str) and 0 < len(value) <= 256 for value in meta.values()),
+            'Provide bounded canonical provenance values')
     project = os.environ.get('FACTORY_PROJECT_ID', '')
     require(str(uuid.UUID(project)) == project and uuid.UUID(project).int != 0 and meta['factoryProjectId'] == project,
             'Factory project UUID differs from selected app registry')
@@ -83,6 +84,10 @@ def execute(args):
         require(getattr(args, 'owner_record', None), 'New project creation requires a new private ownership receipt path')
         ownership_path = private_path(args.owner_record)
         require(meta['factoryCreationRunId'] == meta['factoryLastRunId'] and meta['factorySourceCommit'] == meta['factoryLastSourceCommit'], 'Creation provenance must initialize original/latest fields together')
+        if 'factorySourceBranch' in meta:
+            require(meta['factorySourceBranch'] == meta['factoryLastSourceBranch']
+                    and meta['factorySourceAuthor'] == meta['factoryLastSourceAuthor'],
+                    'New resources must initialize readable creation/latest fields together')
         require(isinstance(payload, dict), 'Project creation requires a JSON object')
         require(payload.get('name') == args.project and payload.get('publicSource') is False,
                 'Project creation target/source visibility mismatch')
@@ -102,8 +107,7 @@ def execute(args):
         if parts[2] == 'projects':
             require(len(parts) >= 4 and parts[3] == project['id'], 'Project API path must use the exact verified ID')
             if mutation:
-                for key in ('factorySourceRepo', 'factorySourceCommit', 'factoryCreatedBy', 'factoryCreatedAt', 'factoryCreationRunId'):
-                    require(meta[key] == ownership['metadata'][key], 'Project updates must preserve original creation attribution')
+                preserve_creation_metadata(meta, ownership['metadata'])
         elif args.method == 'POST' and args.path == '/v13/deployments':
             require(isinstance(payload, dict), 'Deployment creation requires a JSON object')
             require(payload.get('project') == project['id'] and payload.get('name') == project['name'], 'Deployment payload target mismatch')
@@ -115,8 +119,7 @@ def execute(args):
             if mutation:
                 previous = deployment.get('meta', {})
                 require(isinstance(previous, dict) and previous.get('factoryProjectId') == meta['factoryProjectId'], 'Deployment provenance is missing or belongs to another factory project')
-                for key in ('factorySourceRepo', 'factorySourceCommit', 'factoryCreatedBy', 'factoryCreatedAt', 'factoryCreationRunId'):
-                    require(meta[key] == previous.get(key), 'Deployment updates must preserve original creation attribution')
+                preserve_creation_metadata(meta, previous)
     operation = Operation(args.record, args.output, 'Vercel', json.dumps([args.method, args.path, payload], sort_keys=True).encode())
     try:
         event(operation.record, 'identity-verified', principal=principal['id'], team=team, project=args.project, metadata=meta)
@@ -155,7 +158,7 @@ def main():
     parser.add_argument('--project', required=True)
     parser.add_argument('--path', required=True)
     parser.add_argument('--request')
-    parser.add_argument('--provenance', help='Private canonical 13-field metadata JSON for mutations')
+    parser.add_argument('--provenance', help='Private canonical provenance JSON, including readable labels for new resources')
     parser.add_argument('--owner-record', help='Private project ownership receipt (new for creation, required for mutations)')
     parser.add_argument('--record', required=True)
     parser.add_argument('--output', required=True)

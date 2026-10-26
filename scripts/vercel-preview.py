@@ -15,7 +15,7 @@ import subprocess
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
-from provider import METADATA, ProviderError, Vercel, diagnostic  # noqa: E402
+from provider import METADATA, ProviderError, Vercel, diagnostic, validate_metadata_shape  # noqa: E402
 
 PROTECTED = {"all", "all_except_custom_domains", "preview", "prod_deployment_urls_and_all_previews"}
 
@@ -125,7 +125,8 @@ def read_request(path, project_id, source):
         require(isinstance(file.get("data"), str) and file.get("encoding", "utf-8") in ("utf-8", "base64"), "Malformed inline file")
         seen.add(name)
     meta = payload.get("meta")
-    require(isinstance(meta, dict) and set(meta) == set(METADATA) and all(isinstance(meta.get(key), str) and 0 < len(meta[key]) <= 256 for key in METADATA),
+    validate_metadata_shape(meta)
+    require(all(isinstance(value, str) and 0 < len(value) <= 256 for value in meta.values()),
             "All required provenance metadata must be present")
     require(meta["factoryEnvironment"] == "preview" and meta["factoryManagedBy"] == "engineering-factory"
             and meta["factoryProvenanceVersion"] == "1", "Invalid preview provenance mapping")

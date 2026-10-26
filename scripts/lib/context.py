@@ -12,7 +12,7 @@ import tempfile
 import uuid
 from urllib.parse import urlsplit
 
-from provider import gh_environment, METADATA
+from provider import gh_environment, READABLE_METADATA, validate_metadata_shape
 from runtime import ROOT, base_env, digest, known_credentials, load, private_path, read_private, require, run, valid_environment
 
 REPO = r'[a-z0-9][a-z0-9-]{0,38}/[a-z0-9][a-z0-9_.-]{0,99}'
@@ -51,7 +51,7 @@ def clean(data):
 
 
 def metadata(data):
-    require(isinstance(data, dict) and set(data) == set(METADATA), 'Invalid ownership metadata schema')
+    validate_metadata_shape(data)
     for key, value in data.items():
         require(isinstance(value, str) and 0 < len(value) <= 256 and '\n' not in value, 'Invalid ownership metadata value')
         if key in ('factoryProjectId',):
@@ -63,6 +63,8 @@ def metadata(data):
         elif key in ('factoryCreatedAt', 'factoryExpiresAt'):
             if not (key == 'factoryExpiresAt' and value == 'none'):
                 require(datetime.fromisoformat(value.replace('Z', '+00:00')).tzinfo is not None, 'Invalid metadata timestamp')
+        elif key in READABLE_METADATA:
+            pass  # The shared shape check validates complete, bounded readable labels.
         elif key == 'factorySourceRepo':
             require(re.fullmatch(REPO, value.lower()), 'Invalid metadata repository')
         else:
