@@ -371,6 +371,91 @@ class ContextTests(unittest.TestCase):
             github.execute(args)
         self.assertEqual(len(self.published), 1)
 
+    def test_linked_worktree_publishes_its_own_branch_with_public_history_checks(self):
+        self.private = False
+        self.initialize()
+        self.delivery()
+        work = self.root / 'feature-worktree'
+        self.git_run('-C', str(self.app), 'worktree', 'add', '-b', 'feature', str(work))
+        self.assertTrue((work / '.git').is_file())
+        os.environ['FACTORY_PROJECT_APP'] = str(work)
+        context.checkpoint(self.target, work, tools=self.tools)
+        self.git_run('-C', str(work), 'add', '.factory')
+        self.git_run('-C', str(work), 'commit', '-m', 'Feature delivery')
+        args = argparse.Namespace(mode='git', repo=self.target, visibility='public', command=[],
+            action='push', app=str(work), branch='feature', record=str(self.root / 'push.jsonl'), output=str(self.root / 'push.txt'))
+        with patch.object(github, 'load', return_value=self.tools), patch.object(context, 'load', return_value=self.tools), \
+             patch.object(github, 'run', side_effect=self.provider), redirect_stdout(io.StringIO()):
+            github.execute(args)
+        self.assertEqual(self.git_run('--git-dir=' + str(self.remote), 'rev-parse', 'feature').strip(),
+                         self.git_run('-C', str(work), 'rev-parse', 'HEAD').strip())
+        self.git_run('-C', str(self.app), 'config', 'extensions.worktreeConfig', 'true')
+        self.git_run('-C', str(work), 'config', '--worktree', 'http.https://github.com/.extraheader', 'blocked')
+        with self.assertRaises(ProviderError):
+            context.app_identity(self.tools, work, self.target)
+
+    def test_linked_worktree_rejects_shared_alternates_and_wrong_origin(self):
+        work = self.root / 'feature-worktree'
+        self.git_run('-C', str(self.app), 'worktree', 'add', '-b', 'feature', str(work))
+        alternate = self.app / '.git/objects/info/alternates'
+        alternate.parent.mkdir(parents=True, exist_ok=True)
+        alternate.write_text(str(self.remote / 'objects') + '\n')
+        with self.assertRaises(ProviderError):
+            context.app_identity(self.tools, work, self.target)
+        alternate.unlink()
+        self.git_run('-C', str(self.app), 'remote', 'set-url', 'origin', 'https://github.com/fixture-owner/other.git')
+        with self.assertRaises(ProviderError):
+            context.app_identity(self.tools, work, self.target)
+
+    def test_vercel_cli_organization_pair_restores_and_conflicts_fail_closed(self):
+        os.environ.update(FACTORY_VERCEL_TEAM_ID='team_fixture', VERCEL_PROJECT_ID='prj_fixture')
+        initial = self.initialize()
+        self.assertEqual(os.environ['VERCEL_ORG_ID'], 'team_fixture')
+        self.delivery()
+        for key in ('VERCEL_PROJECT_ID', 'VERCEL_ORG_ID', 'FACTORY_VERCEL_TEAM_ID'):
+            os.environ.pop(key, None)
+        _, app, restored = self.fresh()
+        self.assertEqual(restored['VERCEL_ORG_ID'], 'team_fixture')
+        with patch.dict(os.environ, VERCEL_ORG_ID='team_other'), self.assertRaises(ProviderError):
+            context.values(initial, app)
+        initial['config']['VERCEL_ORG_ID'] = 'team_other'
+        with self.assertRaises(ProviderError):
+            context.record(initial)
+
+    def test_native_inventory_ids_round_trip_and_reject_injected_values(self):
+        initial = self.initialize()
+        project = initial['project_id']
+        identities = [
+            ('AWS', 'apigateway:stage', '$default'),
+            ('AWS', 'secretsmanager:secret', 'arn:aws:secretsmanager:us-east-1:111122223333:secret:rds!cluster-fixture'),
+            ('AWS', 'lambda:version', 'arn:aws:lambda:us-east-1:111122223333:function:fixture:$LATEST'),
+            ('Vercel', 'domain', 'fixture.example.test'),
+            ('Vercel', 'certificate', 'cert_fixture-123'),
+            ('Vercel', 'project', 'prj_fixture'),
+        ]
+        resources = [dict(provider=provider, resource_type=kind, resource_id=identity,
+            parent_id=None, backend_ref=None, run_id='fixture', source_commit='d' * 40, status='ready', ownership='managed')
+            for provider, kind, identity in identities]
+        data = dict(schema=1, project_id=project, environment='development', resources=resources)
+        inventory = self.root / 'native-inventory.json'
+        inventory.write_text(json.dumps(data)); inventory.chmod(0o600)
+        context.checkpoint(self.target, self.app, [(inventory, 'inventory')], tools=self.tools)
+        self.delivery()
+        fresh, _, _ = self.fresh()
+        self.assertEqual(json.loads((fresh / 'native-inventory.json').read_bytes()), data)
+        for provider, kind, invalid in (
+            ('Vercel', 'project', 'fixture.example.test'),
+            ('Vercel', 'domain', 'fixture.example.test?token=hidden'),
+            ('Vercel', 'domain', '*.example.test'),
+            ('Vercel', 'certificate', 'https://example.test/certificate'),
+            ('AWS', 'apigateway:stage', '$default\nother'),
+        ):
+            item = dict(resources[0], provider=provider, resource_type=kind, resource_id=invalid)
+            with self.subTest(provider=provider, kind=kind, invalid=invalid), self.assertRaises(ProviderError):
+                context.inventory(json.dumps(dict(data, resources=[item])).encode(), project)
+        with self.assertRaises(ProviderError):
+            context.inventory(json.dumps(dict(data, resources=[dict(resources[0], resource_id=self.token)])).encode(), project)
+
     def test_inventory_and_ownership_restore_exact_layout_and_do_not_authorize_adoption(self):
         initial = self.initialize(); project = initial['project_id']; now = datetime.now(timezone.utc).isoformat()
         meta = dict(factoryProjectId=project, factoryEnvironment='development', factoryOwner='fixture-owner',

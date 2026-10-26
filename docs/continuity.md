@@ -51,3 +51,11 @@ Use `factory-project inventory --repo OWNER/APP --app /canonical/app --inventory
 Limits per app: 128 resources/256 KiB per inventory, 256 artifact files/4 MiB total, and 128 KiB project metadata. Registry directory traversal is bounded to 1,024 entries; public publication history review is bounded to 128 registry-changing commits and otherwise stops for deliberate review. Reaching a limit requires retention/review before dependent work, not silent pruning. Symlinks, Git directories, arbitrary source paths and executable registry entries are refused. Each app owns its history/retention policy.
 
 Legacy `FACTORY_CONTEXT_REPOSITORY` or `FACTORY_CONTEXT_DIRECTORY` settings now fail clearly. Remove them from activation/configuration; the runtime never accesses the old store. This change neither deletes an existing repository nor migrates its contents implicitly. Existing original evidence can be deliberately registered with its verified app; installation, credential grants, runtime publication and fresh-task acceptance remain separate gates.
+
+## Native identifiers and linked worktrees
+
+The typed inventory preserves native AWS identifiers including API Gateway `$default` stages and RDS-managed-secret ARNs containing `!`. Vercel `domain`/`vercel:domain` entries accept exact hostnames and `certificate`/`vercel:certificate` entries accept opaque certificate IDs. Existing project/deployment/team ID checks and closed fields, secret rejection, parent/backend references and private storage rules remain. Format acceptance is not ownership verification; read back actual provider identity before a mutation.
+
+An independent app clone may have linked feature worktrees. Context and Git publication validate the checkout root, self-contained common Git storage, exact origin/branch and configuration including worktree overrides. Submodules, alternate object stores and symlinked metadata are rejected. App source and records still belong to that app; public registry confidentiality checks still run.
+
+Private Vercel configuration can retain `VERCEL_ORG_ID`; when a project and factory team are recorded, context restoration supplies the corresponding CLI organization and rejects conflicting values. This does not establish live CLI permissions.

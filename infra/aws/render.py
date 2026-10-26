@@ -271,6 +271,12 @@ def render(config, baseline, boundary, bootstrap, trust):
     if len(transport) != 1 or len(expiry) != 1:
         raise ValueError('Expected original TLS and provisioning expiry protections')
     new_boundary = document([*allows, relation, admin, *iam_guards, *guards, *transport, *expiry])
+    # A named-role existence lookup can be evaluated before a stored path exists.
+    # Only the runner gets this root-name exception; its paired identity Deny
+    # below closes every operation except these two reads on that same ARN.
+    # Install that Deny before expanding the boundary; reverse this order on rollback.
+    role_lookup = f'{arn}iam::{account}:role/factory-{SCOPE}-r-*'
+    next(s for s in new_boundary['Statement'] if 'NotResource' in s)['NotResource'].append(role_lookup)
     required_bootstrap = ('AssumeFactoryRunnerOnly', 'DenyDirectAwsUse', 'DenyOtherRoles')
     for sid in required_bootstrap:
         if sum(s.get('Sid') == sid for s in bootstrap.get('Statement', [])) != 1:
@@ -336,11 +342,14 @@ def render(config, baseline, boundary, bootstrap, trust):
     create_paths = [app_role.replace(':role/', ':' + kind + '/') for kind in ('role', 'instance-profile', 'policy')]
     identity = document([identity_broad, *[s for s in dns if s['Effect'] == 'Allow'],
         statement(['iam:CreateRole', 'iam:CreateInstanceProfile', 'iam:CreatePolicy'], create_paths, creation())])
+    runner_identity = copy.deepcopy(identity)
+    runner_identity['Statement'].append({'Effect': 'Deny', 'NotAction': ['iam:GetRole', 'iam:GetRolePolicy'],
+                                         'Resource': role_lookup})
     result = {'runner-boundary.json': strip_sids(new_boundary), 'runner-dns-baseline.json': copy.deepcopy(baseline),
         'runner-dns-policy.json': document([*dns, *transport, *expiry]),
         'bootstrap-policy.json': new_bootstrap, 'runner-trust.json': new_trust,
         'app-execution-boundary.json': strip_sids(deployed), 'app-execution-policy.json': strip_sids(identity),
-        'runner-app-1.json': strip_sids(identity)}
+        'runner-app-1.json': strip_sids(runner_identity)}
     for name, policy in result.items():
         for item in policy['Statement']:
             for field in ('Resource', 'NotResource'):
@@ -395,6 +404,7 @@ def main():
         policies={name: dict(chars=len(compact(policy)), sha256=hashlib.sha256(compact(policy)+b'\n').hexdigest()) for name, policy in result.items()},
         runner_managed_policy_count=data['config']['runner_managed_policy_count'],
         runner_managed_policy_limit=data['config']['runner_managed_policy_limit'], planned_new_runner_attachments=1,
+        runner_role_lookup_guard='Install runner-app-1 explicit root-role mutation Deny before runner boundary update; rollback boundary first',
         activation_gates=['live policy/trust comparison', 'complete proposed policy-set validation/simulation',
             'protected and delegated-resource inventory coverage review', 'actual STS/service-context checks',
             'default policy versions, attachments and boundary readback'],

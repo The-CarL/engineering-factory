@@ -189,13 +189,15 @@ class AWSProfileTests(unittest.TestCase):
             self.assertNotIn('aws:RequestedRegion', json.dumps(self.result[name]))
         self.assertNotIn('HoldUnreviewedDelegatedExecution', json.dumps(self.result))
 
-    def test_self_contained_iam_boundary_blocks_outside_paths_boundary_removal_and_elevation(self):
+    def test_typed_iam_mutations_and_delegated_boundary_preserve_path_and_elevation_guards(self):
         for name in ('runner-boundary.json', 'app-execution-boundary.json'):
             statements = self.result[name]['Statement']
             iam = next(s for s in statements if 'NotResource' in s and 'iam:*' in s.get('Action', []))
             iam_paths = [arn for arn in iam['NotResource'] if arn.startswith('arn:aws:iam:')]
-            self.assertEqual(len(iam_paths), 3)
-            for kind, arn in zip(('role', 'instance-profile', 'policy'), iam_paths):
+            self.assertEqual(len(iam_paths), 4 if name == 'runner-boundary.json' else 3)
+            typed_paths = [arn for arn in iam_paths if '/factory/' in arn]
+            self.assertEqual(len(typed_paths), 3)
+            for kind, arn in zip(('role', 'instance-profile', 'policy'), typed_paths):
                 self.assertIn(':' + kind + '/factory/' + profile.SCOPE + '/*', arn)
                 self.assertNotIn(self.arn, arn)
             boundary = next(s for s in statements if s.get('Action') == ['iam:CreateRole', 'iam:PutRolePermissionsBoundary'])
@@ -282,6 +284,26 @@ class AWSProfileTests(unittest.TestCase):
                 if not expected['Condition']['StringLike']:
                     expected['Condition'].pop('StringLike')
                 self.assertEqual(expected, new)
+
+    def test_runner_root_role_lookup_exception_has_paired_explicit_mutation_deny(self):
+        scope = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee-dev'
+        root = 'arn:aws:iam::123456789012:role/factory-' + scope + '-r-api'
+        runner = self.result['runner-boundary.json']['Statement']
+        delegated = self.result['app-execution-boundary.json']['Statement']
+        runner_ns = next(s for s in runner if 'NotResource' in s)
+        app_ns = next(s for s in delegated if 'NotResource' in s)
+        patterns = lambda s: [p.replace(profile.SCOPE, scope) for p in s['NotResource']]
+        self.assertTrue(any(fnmatch.fnmatchcase(root, p) for p in patterns(runner_ns)))
+        self.assertFalse(any(fnmatch.fnmatchcase(root, p) for p in patterns(app_ns)))
+        self.assertFalse(any(fnmatch.fnmatchcase(root.replace(scope, 'other-dev'), p) for p in patterns(runner_ns)))
+        identity = self.result['runner-app-1.json']['Statement']
+        deny = next(s for s in identity if s['Effect'] == 'Deny' and 'NotAction' in s)
+        self.assertEqual(deny['NotAction'], ['iam:GetRole', 'iam:GetRolePolicy'])
+        self.assertTrue(fnmatch.fnmatchcase(root, deny['Resource'].replace(profile.SCOPE, scope)))
+        for action in ('iam:CreateRole', 'iam:PutRolePolicy', 'iam:DeleteRole', 'iam:PassRole',
+                       'iam:UpdateAssumeRolePolicy', 'iam:TagRole', 'iam:PutRolePermissionsBoundary'):
+            self.assertFalse(any(fnmatch.fnmatchcase(action, p) for p in deny['NotAction']))
+        self.assertEqual(identity[:-1], self.result['app-execution-policy.json']['Statement'])
 
     def test_engine_guards_cover_stored_roles_and_cluster_target_not_unsupported_rolearn(self):
         statements = self.result['app-execution-boundary.json']['Statement']
