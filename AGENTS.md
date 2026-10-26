@@ -4,6 +4,7 @@ This public repository supports conversational engineering from a phone or deskt
 
 ## Lead the session
 
+- For UI design, consider the documented [personal-site and Forge styles](docs/design-references.md). Read current source, recommend an appropriate direction and record app-specific adaptations. Honor Carlo's vision and existing app design; the references do not dictate stack, hosting or identical layouts.
 - Preserve the user's intended outcome across questions, corrections and status requests. Lead design before substantial implementation: propose an approach, define success and identify consequential unknowns. Scale the conversation to the task; do not require a universal intake form or a fully specified prompt.
 - Resolve uncertainty deliberately: **ask** when the answer affects product behavior, architecture, cost, exposure or authority; **infer** routine reversible details from context and state material assumptions; **postpone** only with a reason and a trigger for revisiting the decision before dependent work. Do not silently build through an unresolved consequential decision.
 - Reuse existing decisions and authorization. An authorized outcome covers its necessary routine steps within agreed bounds. Resolve and verify exact targets; programmatic `--confirm` arguments do not require another human confirmation when the target follows from that scope. Ask for missing decisions promptly, with a recommendation and practical tradeoffs.

@@ -11,6 +11,10 @@ Use these capabilities to realize Carlo's agreed app design. Choose the componen
 
 Apps own CI/CD definitions and release history. Use provider-native integration or reviewed app-owned authentication; do not copy factory execution credentials into CI. Successful source publication and a passing CI run do not establish a live release.
 
+## Visual design references
+
+For apps with a UI, consider the documented [personal-site and Forge styles](design-references.md). Their current source owns the tokens and examples; recommend an adaptation suitable for the app. This visual reference is independent of provider selection and Forge publication.
+
 ## Resolve targets and reuse them
 
 Keep verified repository/visibility, provider owner/team/account/region, project identity, public DNS zone pair, selected credential transport and configuration names in the app's appropriate records. Private provider IDs and secrets do not belong in public source. Restore the selected app's records on continuation; reconcile actual provider state before a mutation.

@@ -2,6 +2,8 @@
 
 Forge is Carlo's public project catalog and write-up site at [forge.carloperottino.com](https://forge.carloperottino.com/), maintained in the public [The-CarL/carloperottino-forge repository](https://github.com/The-CarL/carloperottino-forge). Consider it the usual publication destination when discussing delivery. Publication requires its agreed scope; it is not automatic for every app. The app repository remains authoritative for application source, infrastructure and operating records.
 
+For app UI inspiration, use the [personal-site and Forge visual references](design-references.md). Forge's documented styles can inform an app without making publication or its hosting architecture mandatory.
+
 ## Work with the current site
 
 Read Forge's current repository instructions, content schema, scripts and applicable publication skills before preparing a change. As inspected on 2026-10-26, entries are Markdown in `src/content/projects/`; app-specific assets conventionally live in `public/projects/SLUG/`. The `.agents/skills/new-project/SKILL.md` and `.claude/skills/new-project/SKILL.md` entrypoints describe a worktree-based draft scaffold. These are repository references, not authority to expand a factory task or publish without scope. Recheck current conventions rather than copying an old schema indefinitely.
