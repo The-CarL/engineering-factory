@@ -309,6 +309,9 @@ class PreviewTests(unittest.TestCase):
             data = payload()
             data["meta"]["factoryLastSourceCommit"] = commit
             data["gitMetadata"]["commitSha"] = commit
+            data["meta"].update(factorySourceRepo="fixture-owner/app", factoryProjectName="Hello World",
+                                factoryRepoName="app", factorySourceBranch="unknown", factorySourceAuthor="unknown",
+                                factoryLastSourceBranch=git("branch", "--show-current"), factoryLastSourceAuthor="Test")
             return data
         for mutation in (
             lambda p: p.update(target="preview"),

@@ -310,6 +310,12 @@ class RuntimeTests(unittest.TestCase):
                 return dict(id='prj_fixture', name='fixture', accountId='team_fixture', publicSource=False,
                             ssoProtection=dict(deploymentType='all'))
         provenance, metadata = self.metadata()
+        self.assertEqual(vercel.provenance(str(provenance)), metadata)  # Legacy record remains usable.
+        metadata.update(factoryProjectName='Hello Cloud', factoryRepoName='app',
+                        factorySourceBranch='feat/first-release', factorySourceAuthor='Carlo Example',
+                        factoryLastSourceBranch='feat/first-release', factoryLastSourceAuthor='Carlo Example')
+        provenance.write_text(json.dumps(metadata))
+        self.assertEqual(vercel.provenance(str(provenance)), metadata)
         request = self.private / 'request.json'
         request.write_text('{"name":"fixture","publicSource":false,"ssoProtection":{"deploymentType":"all"}}')
         request.chmod(0o600)
@@ -329,6 +335,14 @@ class RuntimeTests(unittest.TestCase):
             with self.assertRaises(ProviderError):
                 vercel.execute(args)
             self.assertEqual(sum(method == 'PATCH' for method, _, _ in calls), 1)
+            for key in ('factorySourceBranch', 'factorySourceAuthor'):
+                changed = dict(metadata, **{key: 'rewritten'})
+                provenance.write_text(json.dumps(changed))
+                args.record, args.output = str(self.private/'guard.jsonl'), str(self.private/'guard.json')
+                with self.assertRaisesRegex(ProviderError, 'preserve original'):
+                    vercel.execute(args)
+                self.assertFalse(Path(args.record).exists())
+            provenance.write_text(json.dumps(metadata))
             args.record, args.output = str(self.private/'other.jsonl'), str(self.private/'other.json')
             args.owner_record = None
             with self.assertRaises(ProviderError):

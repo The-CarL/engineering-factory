@@ -457,6 +457,33 @@ class ContextTests(unittest.TestCase):
         with self.assertRaises(ProviderError):
             context.inventory(json.dumps(dict(data, resources=[dict(resources[0], resource_id=self.token)])).encode(), project)
 
+    def test_readable_ownership_metadata_restores_without_losing_labels_or_rewriting_history(self):
+        initial = self.initialize(); project = initial['project_id']; now = datetime.now(timezone.utc).isoformat()
+        meta = dict(factoryProjectId=project, factoryEnvironment='development', factoryOwner='fixture-owner',
+            factoryManagedBy='engineering-factory', factorySourceRepo=self.target, factorySourceCommit='d' * 40,
+            factoryCreatedBy='fixture', factoryCreatedAt=now, factoryCreationRunId='fixture-run', factoryLastRunId='fixture-run',
+            factoryLastSourceCommit='d' * 40, factoryProvenanceVersion='1', factoryExpiresAt='none',
+            factoryProjectName='Hello Cloud', factoryRepoName=self.target.rsplit('/', 1)[-1],
+            factorySourceBranch='feat/first-release', factorySourceAuthor='Carlo Example',
+            factoryLastSourceBranch='feat/first-release', factoryLastSourceAuthor='Carlo Example')
+        creation = self.journal()
+        events = [dict(time=now, state='intent', provider='Vercel', source='a' * 40, request_sha256='b' * 64),
+            dict(time=now, state='created-resource', team='team_fixture', project='prj_fixture', name='fixture', metadata=meta),
+            dict(time=now, state='complete', response_sha256='c' * 64, size=12)]
+        creation.write_bytes(b''.join(json.dumps(event).encode() + b'\n' for event in events))
+        owner = self.root / 'owner.json'
+        owner.write_text(json.dumps(dict(schema=1, factory_project_id=project, team_id='team_fixture', project_id='prj_fixture',
+            project_name='fixture', metadata=meta, creation_record='operations/write.jsonl',
+            creation_record_sha256=digest(creation.read_bytes()))))
+        owner.chmod(0o600)
+        context.checkpoint(self.target, self.app, [(owner, 'ownership')], tools=self.tools)
+        expected = {str(path.relative_to(self.root)): path.read_bytes() for path in (creation, owner)}
+        self.delivery()
+        fresh, _, _ = self.fresh()
+        for name, data in expected.items():
+            self.assertEqual((fresh / name).read_bytes(), data)
+        self.assertEqual(context.receipt((fresh / 'owner.json').read_bytes(), project)['metadata'], meta)
+
     def test_inventory_and_ownership_restore_exact_layout_and_do_not_authorize_adoption(self):
         initial = self.initialize(); project = initial['project_id']; now = datetime.now(timezone.utc).isoformat()
         meta = dict(factoryProjectId=project, factoryEnvironment='development', factoryOwner='fixture-owner',

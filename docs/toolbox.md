@@ -25,6 +25,10 @@ For Route53, use the configured exact public zone name/ID and verify their pairi
 
 For Git operations, an app starts in an independent clone. A linked worktree of that app can be used for a feature or Forge change: verify its Git root, shared storage, exact origins, visibility and checked-out branch. Shared worktree configuration and public-registry confidentiality checks still apply. A factory worktree is not an application repository.
 
+## Readable resource metadata
+
+Use the [offline provenance helper](provenance-metadata.md) to prepare readable project/repo labels and original/latest Git branch/author attribution alongside stable IDs. It produces private canonical metadata plus AWS tag-map/list payloads from verified clean source; actual IaC/service calls and readback still apply the tags. Keep execution actor and commit author distinct, preserve creation history and retain unknown historical facts honestly.
+
 ## Tools and evidence
 
 The [runtime commands](runtime-commands.md) document concrete entrypoints; [provider contracts](provider-workflows.md) cover their operational checks. Prefer a verified supported route for the target. Preserve the selected identity, permissions, provenance and operation records across tool choices; a different route is not a way around an access denial.
