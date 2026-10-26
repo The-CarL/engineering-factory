@@ -71,7 +71,7 @@ def contents(target, origin):
     factory_repo = origin_repo(git(ROOT, "remote", "get-url", "--all", "origin").decode().strip())
     require(factory_repo != target, "Factory repository cannot be an app target")
     # Verify the version recorded actually contains this helper, its templates and standard.
-    names = ["scripts/seed-project.py", "standards/application-design.md", "standards/conversational-delivery.md"] + ["templates/project/" + name + ".tmpl" for name in FILES]
+    names = ["scripts/seed-project.py", "standards/product-architecture.md", "standards/application-design.md", "standards/conversational-delivery.md"] + ["templates/project/" + name + ".tmpl" for name in FILES]
     for name in names:
         require(not (ROOT / name).is_symlink() and git(ROOT, "show", revision + ":" + name) == (ROOT / name).read_bytes(),
                 "Commit the reviewed seeding source/templates/standard before use")

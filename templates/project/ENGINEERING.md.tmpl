@@ -10,7 +10,9 @@ The shared operating rules in `AGENTS.md` are available locally to any selected 
 
 ## Product and architecture
 
-Record the product outcome, intended users and acceptance criteria. Choose only required components, runtime, hosting and integrations. Document relevant interfaces, data ownership, configuration boundaries, authentication/authorization and compatibility. If the app needs persistence or jobs, include durability/migration/restore or execution/retry/output behavior as applicable.
+Apply the pinned product co-architecture standard for a new product or material redesign. Maintain a compact current design: purpose and value/hypothesis, users and core/operator journeys, functional scope/exclusions, experience and acceptance, constraints and current delivery phase. Recommend useful increments and record what each proves; test/POC/product labels do not automatically determine rigor or disposability.
+
+Record selected components, responsibilities, hosting/DNS, dependencies and data/control/trust boundaries. Cover material data correctness/lifecycle, identity/security/privacy, performance/capacity, availability/recovery, integrations, observability/response, cost, maintainability and evolution tradeoffs as relevant. For each material concern, capture the commitment/evidence, accepted residual risk, justified deferral with a trigger, or why it does not apply. Do not duplicate the whole review table or create empty paperwork. Keep deeper rationale/diagrams in app-owned `docs/design/` when useful.
 
 For UI work, record the chosen visual direction, the personal-site/Forge reference repository/files and reviewed commit when available, and meaningful adaptations to palette, typography, layout, controls, supported themes and motion. Use app-owned styling and verify accessibility/mobile behavior. Preserve existing design and Carlo's preferences; this is an agent-maintained record rather than a required design questionnaire.
 
@@ -44,6 +46,7 @@ When Forge publication is agreed, record its repository, entry/asset paths, PR/s
 
 - [Toolbox]({{factory_url}}/blob/{{revision}}/docs/toolbox.md), [Forge publication]({{factory_url}}/blob/{{revision}}/docs/forge.md) and [cleanup]({{factory_url}}/blob/{{revision}}/standards/cleanup.md)
 
+- [Product co-architecture]({{factory_url}}/blob/{{revision}}/standards/product-architecture.md) — read for new product design or material architecture changes.
 - [Conversational delivery]({{factory_url}}/blob/{{revision}}/standards/conversational-delivery.md)
 - [Application design]({{factory_url}}/blob/{{revision}}/standards/application-design.md) and [personal-site/Forge visual references]({{factory_url}}/blob/{{revision}}/docs/design-references.md)
 - [Testing]({{factory_url}}/blob/{{revision}}/standards/testing.md) and [software quality]({{factory_url}}/blob/{{revision}}/standards/software-quality.md)

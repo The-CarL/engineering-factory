@@ -25,6 +25,7 @@ class SeedTests(unittest.TestCase):
         (self.factory / "scripts").mkdir(parents=True)
         (self.factory / "standards").mkdir()
         shutil.copyfile(SOURCE / "scripts/seed-project.py", self.factory / "scripts/seed-project.py")
+        shutil.copyfile(SOURCE / "standards/product-architecture.md", self.factory / "standards/product-architecture.md")
         shutil.copyfile(SOURCE / "standards/application-design.md", self.factory / "standards/application-design.md")
         shutil.copyfile(SOURCE / "standards/conversational-delivery.md", self.factory / "standards/conversational-delivery.md")
         shutil.copytree(SOURCE / "templates", self.factory / "templates")
@@ -67,6 +68,7 @@ class SeedTests(unittest.TestCase):
         self.assertIn("https://github.com/fixture-owner/new-app.git", agent)
         self.assertIn(self.revision, agent)
         self.assertIn("/blob/" + self.revision + "/standards/application-design.md", engineering)
+        self.assertIn("/blob/" + self.revision + "/standards/product-architecture.md", engineering)
         self.assertTrue((self.app / "CLAUDE.md").read_text().startswith("@AGENTS.md\n"))
         self.assertNotIn("{{", agent + engineering)
         self.assertEqual(self.local_git(self.app, "rev-parse", "HEAD").stdout, self.head)
@@ -144,20 +146,21 @@ class SeedTests(unittest.TestCase):
         self.assertNotEqual(self.run_seed().returncode, 0)
         self.assert_outputs_absent()
 
-    def test_dirty_or_missing_delivery_standard_cannot_claim_committed_guidance(self):
-        standard = self.factory / "standards/conversational-delivery.md"
-        original = standard.read_text()
-        for content in (original + "\nUncommitted delivery change\n", None):
-            with self.subTest(content="missing" if content is None else "modified"):
-                if content is None:
-                    standard.unlink()
-                else:
-                    standard.write_text(content)
-                self.assertNotEqual(self.run_seed().returncode, 0)
-                self.assertNotEqual(self.run_seed("--dry-run").returncode, 0)
-                self.assert_outputs_absent()
-                self.assertEqual((self.app / "existing.txt").read_text(), "preserve user work")
-                standard.write_text(original)
+    def test_dirty_or_missing_shared_standards_cannot_claim_committed_guidance(self):
+        for name in ("product-architecture.md", "conversational-delivery.md"):
+            standard = self.factory / "standards" / name
+            original = standard.read_text()
+            for content in (original + "\nUncommitted shared guidance change\n", None):
+                with self.subTest(standard=name, content="missing" if content is None else "modified"):
+                    if content is None:
+                        standard.unlink()
+                    else:
+                        standard.write_text(content)
+                    self.assertNotEqual(self.run_seed().returncode, 0)
+                    self.assertNotEqual(self.run_seed("--dry-run").returncode, 0)
+                    self.assert_outputs_absent()
+                    self.assertEqual((self.app / "existing.txt").read_text(), "preserve user work")
+                    standard.write_text(original)
 
     def test_nested_apps_require_ignored_workspace_and_have_no_factory_changes(self):
         for name, accepted in (("app-not-ignored", False), ("workspaces/fixture-owner/app", True)):

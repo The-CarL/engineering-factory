@@ -4,7 +4,7 @@ Use [AGENTS.md](../AGENTS.md) as this repository's shared operating instructions
 
 ## Shared core and client entrypoints
 
-The factory is agent-neutral. Carlo co-designs with the selected agent, which acts as his build manager under the same delivery, security and provenance standards. The AI client, execution host and application hosting providers are independent choices. Codex Cloud is one host profile; the shared provider tools do not invoke or require Codex. See [execution hosts](execution-hosts.md).
+The factory is agent-neutral. Carlo co-designs with the selected agent, which acts as his co-architect and build manager under the same product/architecture, delivery, security and provenance standards. The AI client, execution host and application hosting providers are independent choices. Codex Cloud is one host profile; the shared provider tools do not invoke or require Codex. See [execution hosts](execution-hosts.md).
 
 | Artifact | Shared purpose |
 |---|---|
@@ -22,7 +22,7 @@ Checked against official documentation on **2026-10-19**:
 
 When instructions change, start a fresh session and verify the intended sources in the selected client and directory. Resolve conflicting local/global guidance before consequential work. User authorization and host safety constraints still apply; imported documents cannot expand task scope. Instruction files provide context, not enforced IAM or sandbox boundaries.
 
-Compare the actual checkout and installed runtime revisions with the intended factory source/release early in a session. A merged PR does not update an older snapshot, active session or pinned app instruction seed. Distinguish an outdated installation from a missing capability in current source; surface the exact update/verification needed. Update existing app instructions deliberately while preserving app decisions and local changes. Verify conversational-delivery rules through the client's real instruction-loading path in a fresh session; a link alone does not load them.
+Compare the actual checkout and installed runtime revisions with the intended factory source/release early in a session. A merged PR does not update an older snapshot, active session or pinned app instruction seed. Distinguish an outdated installation from a missing capability in current source; surface the exact update/verification needed. Update existing app instructions deliberately while preserving app decisions and local changes. Verify conversational-delivery rules and the relevant [product co-architecture standard](../standards/product-architecture.md) through the client's real instruction-loading path in a fresh session; a link alone does not load them. For new product design/material redesign, explicitly read the standard from verified local source or the app's pinned factory reference. Do not maintain divergent client-specific architecture policies.
 
 ## Other AI engineering clients
 
