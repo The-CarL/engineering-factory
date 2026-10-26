@@ -43,6 +43,7 @@ Factory checks establish offline behavior. Accept the environment capabilities a
 
 ## Operating references
 
+- [History and lessons](docs/history/README.md), [unresolved findings](docs/history/README.md#unresolved-and-deferred-work) and [design decisions](docs/design/README.md)
 - [Setup and local helpers](docs/setup.md), [architecture](docs/architecture.md) and [phone operation](docs/mobile-workflow.md)
 - [Conversational delivery](standards/conversational-delivery.md), [application design](standards/application-design.md), [personal-site/Forge design references](docs/design-references.md), [bounded work](standards/bounded-runs.md) and [provider contracts](docs/provider-workflows.md)
 - [Runtime installation and provider commands](docs/runtime-commands.md), [tool pins](runtime/pins.json) and [names-only Codex Cloud binding example](runtime/environment.example.json)
