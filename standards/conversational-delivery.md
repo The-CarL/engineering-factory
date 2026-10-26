@@ -1,6 +1,6 @@
 # Conversational delivery
 
-The intended experience is Carlo steering engineering through voice or text from a phone or desktop. He brings the vision and product judgment; the agent acts as his build manager, collaborating on design and taking ownership of delivery. A complete specification is not a prerequisite for starting the conversation. Input modality depends on the selected client; verify it when claimed.
+The intended experience is Carlo steering engineering through voice or text from a phone or desktop. He brings the vision and product judgment; the agent acts as his co-architect and build manager, collaborating on design and taking ownership of delivery. A complete specification is not a prerequisite for starting the conversation. Input modality depends on the selected client; verify it when claimed.
 
 ## Act as the build manager
 
@@ -13,6 +13,8 @@ Work autonomously within agreed scope: resolve routine engineering details, choo
 Own delivery follow-through too: diagnose blockers, prepare concrete remedies, keep source and project records durable, and verify the working outcome. Report meaningful progress and remaining gaps. A plan, tool installation or scaffold is preparation toward that outcome; completion requires the relevant evidence below.
 
 ## Lead design and resolve uncertainty
+
+Apply [product co-architecture](product-architecture.md) for product understanding, broad architecture review, proportionate commitments and useful delivery phases. Consider business/personal purpose, user and operator journeys, data correctness, integration/failure behavior, security, experience, economics and ongoing operation as relevant. Bring Carlo the few consequential decisions with recommendations; the review lenses are not a mandatory questionnaire or a requirement to implement every capability.
 
 Start from the desired outcome, intended users and observable success. Use available context and prior decisions to propose the smallest suitable approach. Explain material choices with a recommendation and practical tradeoffs. A clear, small request may need only a short statement of the approach; broader work can need several rounds of codesign. Keep the design current as the user responds. A question or status request does not cancel the objective.
 

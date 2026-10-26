@@ -1,5 +1,7 @@
 # Application design and operation
 
+Apply [product co-architecture](product-architecture.md) before selecting components for a new product or material redesign. It defines shared expectations for understanding purpose, users and journeys, reviewing the full design space, choosing proportionate tradeoffs and shaping delivery increments. Use this document for the resulting implementation and operating contract; preserve settled app decisions on narrower changes.
+
 Choose architecture from the product's users, behavior, constraints and operating needs. Define the outcome and acceptance criteria before selecting components. Use a suitable supported stack and provider; a project may be a static site, frontend, API/service, full-stack app, worker/job or another workload. Choose each component's hosting and any DNS approach during codesign, recording intentionally deferred choices and their triggers. Vercel can host a frontend when the design calls for it; AWS or another approved provider can also do so. Available integrations do not dictate the architecture. Components and verification apply when relevant to that product.
 
 ## Visual direction

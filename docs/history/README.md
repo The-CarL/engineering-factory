@@ -32,7 +32,7 @@ These are dated findings, not claims that every current environment still fails.
 | O4 | **Open compatibility issue:** Vercel project creation/readback succeeded, but the wrapper rejected an omitted `publicSource` field. | Review the provider response contract and implement meaningful validation/reconciliation without treating omission as proof of the desired setting or retrying creation blindly. |
 | O5 | **App-local fixes, promotion unverified:** teardown helper executable permission, Vercel HTTP status parsing and bounded domain-fetch retries. | Locate the actual code, reproduce the relevant defect, and promote only fixes needed by shared tooling with appropriate checks. Do not claim these all landed in the factory. |
 | O6 | **Per-host acceptance required:** repeated environment edit/start failures had no established common cause. Newer merged guidance does not prove a refreshed runtime or fresh-session access. | Verify the intended revision and real app path on the selected host/client. Preserve dated evidence and do not call repository checks environment acceptance. |
-| O7 | **Deliberately deferred:** a more developed product/design flow. | Reopen with Carlo when working on overall design. Current guidance supports flexible co-design without a mandatory wizard or lifecycle taxonomy. |
+| O7 | **Reopened by Carlo, 2026-10-26:** the previously deferred product/design work now has shared [co-architecture guidance](../../standards/product-architecture.md). | Adopt the standard through the real client instruction path and verify proportionate product/design judgment and continuation. More specific workflow/tooling remains undecided; no mandatory wizard or lifecycle taxonomy is introduced. |
 
 ## Maintaining this record
 
