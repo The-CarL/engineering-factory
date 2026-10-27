@@ -1,4 +1,8 @@
 # Reference: render its app-specific fields, adapt app commands, review, then commit in the APP.
+# Current example: signed APKs with GitHub-secret transport only.
+# The accepted MVP prefers app-owned AWS Secrets Manager and permits unsigned handoff.
+# This template does not implement secret enrollment/retrieval or unsigned publication.
+# Adapt the selected app path using standards/android.md and docs/android-delivery.md.
 name: Android preview release
 on:
   workflow_dispatch:
