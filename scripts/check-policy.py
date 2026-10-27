@@ -11,7 +11,9 @@ required = ["README.md", "AGENTS.md", "LICENSE", ".gitignore", ".env.example",
             "standards/software-quality.md", "standards/testing.md", "standards/security.md",
             "standards/infrastructure.md", "standards/deployment.md", "standards/conversational-delivery.md",
             "docs/architecture.md", "docs/setup.md", "docs/security-model.md",
-            "docs/mobile-workflow.md", "docs/credential-checklist.md"]
+            "docs/mobile-workflow.md", "docs/credential-checklist.md",
+            "standards/android.md", "docs/android-delivery.md", "scripts/android-sign.py",
+            "scripts/android-artifact.py", "scripts/android-release.py"]
 errors = [f"Missing required file: {name}" for name in required if not (root / name).is_file()]
 tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
 for name in filter(None, tracked):
@@ -19,7 +21,7 @@ for name in filter(None, tracked):
     if (any(part in (".aws", ".terraform", "workspaces", ".vercel") for part in path.parts)
             or (path.name.startswith(".env") and path.name != ".env.example")
             or path.name in ("id_rsa", "id_ed25519")
-            or re.search(r"\.(?:pem|key|tfvars)$|\.tfstate(?:\.|$)", path.name)):
+            or re.search(r"\.(?:pem|key|tfvars|jks|keystore|p12|pfx|apk|aab)$|\.tfstate(?:\.|$)", path.name)):
         errors.append(f"Forbidden tracked credential/state/workspace path: {name}")
 example = root / ".env.example"
 if example.is_file():

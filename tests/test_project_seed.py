@@ -26,6 +26,9 @@ class SeedTests(unittest.TestCase):
         (self.factory / "standards").mkdir()
         shutil.copyfile(SOURCE / "scripts/seed-project.py", self.factory / "scripts/seed-project.py")
         shutil.copyfile(SOURCE / "standards/product-architecture.md", self.factory / "standards/product-architecture.md")
+        (self.factory / "docs").mkdir()
+        shutil.copyfile(SOURCE / "standards/android.md", self.factory / "standards/android.md")
+        shutil.copyfile(SOURCE / "docs/android-delivery.md", self.factory / "docs/android-delivery.md")
         shutil.copyfile(SOURCE / "standards/application-design.md", self.factory / "standards/application-design.md")
         shutil.copyfile(SOURCE / "standards/conversational-delivery.md", self.factory / "standards/conversational-delivery.md")
         shutil.copytree(SOURCE / "templates", self.factory / "templates")
@@ -147,7 +150,7 @@ class SeedTests(unittest.TestCase):
         self.assert_outputs_absent()
 
     def test_dirty_or_missing_shared_standards_cannot_claim_committed_guidance(self):
-        for name in ("product-architecture.md", "conversational-delivery.md"):
+        for name in ("product-architecture.md", "conversational-delivery.md", "android.md"):
             standard = self.factory / "standards" / name
             original = standard.read_text()
             for content in (original + "\nUncommitted shared guidance change\n", None):

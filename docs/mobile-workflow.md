@@ -12,6 +12,8 @@ The agent verifies the target repository/origin and applicable instructions, the
 
 Verification follows the workload. Use a browser when UI behavior matters, requests for service interfaces, and execution/output checks for jobs or other runtimes. Use the actual mechanism available in the task; local Chrome configuration alone does not establish Cloud browser capability. Preserve selected provider protections and permission boundaries.
 
+For an Android product, follow the [native Android delivery guide](android-delivery.md). A phone-controlled coding session and a browser UI are distinct from a native APK installed on a device. Restore app source and signing/release references, and verify the native user/API/data flow and updates independently of the build VM.
+
 ## Fresh-task continuation
 
 A new task may have a fresh VM/actor. Make source and needed private recovery artifacts durable through approved Git push/export and verify restoration before relying on them. A summary or workspace-local hash does not transfer source bytes.

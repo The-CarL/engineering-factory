@@ -13,6 +13,7 @@ Give Carlo the proposed outcome, exact private targets and a dependency-ordered 
 - Data: what will be deleted or preserved, snapshots/backups/retained automated backups, recovery options and irreversible effects. Any change to deletion protection or retention belongs in the plan.
 - DNS: only the exact app-owned records, with current-value/ownership readback. Protect core records and shared zone/delegation settings.
 - Forge or other publications: whether to keep an archive or remove the listing, article, screenshots and other owned assets, including the URLs that must disappear.
+- Android/native distributions: release/download assets and tags within approved scope, CI artifacts/caches, active installed clients and backend compatibility, publications and a deliberate signing-key retention/recovery decision. Removing a release does not uninstall existing copies. Do not destroy a key needed for retained installations as routine cleanup.
 - Source, evidence and continuing costs: what remains, why it remains, its retention location and any known ongoing charges. Source repository deletion requires explicit scope.
 
 State the order, cascade effects, known provider limitations, expected asynchronous waits, verification steps and recovery/rollback limits. State whether cost figures are estimates or actual observations. Reference the plan revision and approved resource set in the private operation record. Do not expose private IDs or credentials in a public PR.

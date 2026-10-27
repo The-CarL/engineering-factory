@@ -1,0 +1,146 @@
+# Reference: render its app-specific fields, adapt app commands, review, then commit in the APP.
+name: Android preview release
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: New android-* tag for this source
+        required: true
+        type: string
+      previous_release:
+        description: Previous android-* release; empty only for first enrollment
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: android-preview-release
+  cancel-in-progress: false
+jobs:
+  package:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: The-CarL/engineering-factory
+          ref: "{{factory_revision}}"
+          path: .factory-tools
+          persist-credentials: false
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00
+        with:
+          distribution: temurin
+          java-version: "{{java_version}}"
+      - name: App-pinned toolchain, checks and unsigned build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          ./ci/setup-android.sh
+          ./ci/check-android.sh
+          ./ci/build-android-unsigned.sh "$RUNNER_TEMP/android/unsigned.apk"
+      - name: Restore previous manifest for upgrade validation
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIOUS_RELEASE: ${{ inputs.previous_release }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$PREVIOUS_RELEASE" ]]; then
+            [[ "$PREVIOUS_RELEASE" =~ ^android-[A-Za-z0-9][A-Za-z0-9_.-]{0,100}$ ]]
+            mkdir -p "$RUNNER_TEMP/android-previous"
+            gh release download "$PREVIOUS_RELEASE" --repo "$GITHUB_REPOSITORY" \
+              --pattern release.json --dir "$RUNNER_TEMP/android-previous"
+          fi
+      - name: Sign standalone APK with app-owned bindings
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          set +x
+          python3 .factory-tools/scripts/android-sign.py \
+            --unsigned "$RUNNER_TEMP/android/unsigned.apk" \
+            --config "$GITHUB_WORKSPACE/.factory/android-release.json" \
+            --sdk-root "$ANDROID_HOME" --java-home "$JAVA_HOME" \
+            --output "$RUNNER_TEMP/android/signed.apk"
+      - name: Verify package, signer, toolchain and source; prepare bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous=()
+          if [[ -f "$RUNNER_TEMP/android-previous/release.json" ]]; then
+            previous=(--previous-manifest "$RUNNER_TEMP/android-previous/release.json")
+          fi
+          python3 .factory-tools/scripts/android-artifact.py \
+            --source "$GITHUB_WORKSPACE" --config "$GITHUB_WORKSPACE/.factory/android-release.json" \
+            --apk "$RUNNER_TEMP/android/signed.apk" --sdk-root "$ANDROID_HOME" --java-home "$JAVA_HOME" \
+            --output "$RUNNER_TEMP/android-bundle" "${previous[@]}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-bundle
+          path: ${{ runner.temp }}/android-bundle/
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    needs: package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: The-CarL/engineering-factory
+          ref: "{{factory_revision}}"
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: android-bundle
+          path: ${{ runner.temp }}/android-bundle
+      - name: Install factory-pinned official gh without provider credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, io, json, os, tarfile, urllib.request
+          from pathlib import Path
+          pin = json.loads(Path('runtime/pins.json').read_text())['gh']
+          archive = urllib.request.urlopen(pin['url'], timeout=30).read(64 * 1024 * 1024)
+          if hashlib.sha256(archive).hexdigest() != pin['sha256']:
+              raise SystemExit('GitHub CLI archive integrity failed')
+          with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+              member = tar.getmember('gh_' + pin['version'] + '_linux_amd64/bin/gh')
+              if not member.isfile():
+                  raise SystemExit('Invalid GitHub CLI archive member')
+              output = Path(os.environ['RUNNER_TEMP']) / 'gh'
+              output.write_bytes(tar.extractfile(member).read())
+              output.chmod(0o700)
+          PY
+      - name: Publish and read back the exact APK bundle
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          python3 scripts/android-release.py --bundle "$RUNNER_TEMP/android-bundle" \
+            --repo "$GITHUB_REPOSITORY" --visibility "{{repository_visibility}}" \
+            --tag "$RELEASE_TAG" --source-commit "$GITHUB_SHA" --gh "$RUNNER_TEMP/gh" \
+            --record "$RUNNER_TEMP/android-release-operation.jsonl"
+      - name: Preserve operation evidence after success or failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-release-operation
+          path: ${{ runner.temp }}/android-release-operation.jsonl
+          if-no-files-found: ignore
+          retention-days: 14
