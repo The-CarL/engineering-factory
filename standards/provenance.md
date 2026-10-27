@@ -105,3 +105,7 @@ For AWS, reconcile approved regional service inventories and supported tag queri
 2. After writes: provider readback and inventory agree on every created/changed object, child resource, project/environment and source/run attribution; health checks pass. No unowned created resources may remain unaccounted for.
 3. Verify permitted and denied behavior using policy simulation and authorized disposable controls. Do not test a denial by attempting to damage core assets. Record evidence separately from identity-only preflight.
 4. Missing attribution, unknown ownership or an unreconciled partial failure fails deployment acceptance. Stop further writes and reconcile; cleanup requires its own approved scope.
+
+## Android release artifacts
+
+For Android delivery, retain app ID/version, enrolled signer fingerprint, source commit/repository/readable branch-author labels, build-tool identity, APK checksum and release/job/actor evidence in app-owned records. Keep original identity and update history; a new build is a new artifact. Follow [Android delivery](android.md) for downloadable metadata/confidentiality, signature/byte-readback checks and client/backend compatibility. APK metadata does not tag AWS resources or replace their full provenance mapping.

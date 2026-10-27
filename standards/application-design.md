@@ -4,6 +4,8 @@ Apply [product co-architecture](product-architecture.md) before selecting compon
 
 Choose architecture from the product's users, behavior, constraints and operating needs. Define the outcome and acceptance criteria before selecting components. Use a suitable supported stack and provider; a project may be a static site, frontend, API/service, full-stack app, worker/job or another workload. Choose each component's hosting and any DNS approach during codesign, recording intentionally deferred choices and their triggers. Vercel can host a frontend when the design calls for it; AWS or another approved provider can also do so. Available integrations do not dictate the architecture. Components and verification apply when relevant to that product.
 
+For Android clients, also apply [Android applications and APK delivery](android.md). Distinguish browser responsiveness from native packaging/device acceptance; choose client/framework/build/distribution targets during codesign.
+
 ## Visual direction
 
 For UI work, consider [Carlo's personal-site and Forge design references](../docs/design-references.md) before recommending visual direction. Their repositories own the documented styles; read the current tokens and relevant components, and use the rendered sites when layout/behavior needs confirmation. Recommend the reference or adaptation that fits the app and Carlo's stated preferences. Preserve existing app conventions unless a redesign is requested; a backend-only task does not need visual-reference research.

@@ -22,6 +22,7 @@ See the [toolbox](docs/toolbox.md) for what GitHub, Vercel, AWS and Forge provid
 |---|---|
 | App repository onboarding | `plan-repo.sh` prints a manual creation brief for Carlo; `clone-repo.sh` verifies and clones an existing repository. Private by default; no automatic repository creation. |
 | Shared app instructions | `seed-project.py`: only AGENTS.md, CLAUDE.md and ENGINEERING.md in a verified independent clone; preserves differing user files. |
+| Android APK delivery | [Shared Android guidance](standards/android.md), optional app-owned toolchain/CI references, and signing/artifact/release helpers; actual native build/device acceptance remains app-specific. |
 | Readable project/source metadata | `provenance-metadata.py`: offline verified Git branch/author and project/repo labels; private canonical metadata and AWS tag payloads, preserving creation history. |
 | Provider identity and credential-source checks | `preflight.sh` and reviewed transport helpers; reads do not prove write permissions. |
 | Versioned execution runtime | `runtime/setup.py` / `start.py`: supported-base bootstrap, pinned provider tools and integrity manifest; `factory-aws`, `factory-gh`, `factory-git`, `factory-vercel` command paths for approved operations. |

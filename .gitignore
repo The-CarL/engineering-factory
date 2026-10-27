@@ -32,3 +32,11 @@ build/
 # Local Python test caches
 __pycache__/
 *.py[cod]
+
+# Android signing material and generated binaries belong outside source
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.apk
+*.aab

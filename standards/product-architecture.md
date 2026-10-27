@@ -115,6 +115,8 @@ Report what the design supports, what was tested, what remains provisional and w
 
 After feedback, incidents or changed requirements, update the app's current architecture and affected acceptance criteria. Propose a justified scope/architecture change when necessary; preserve the original objective and settled decisions elsewhere. Broader design guidance is useful only if the delivered behavior and operational records stay aligned.
 
+For a native Android product, apply [Android-specific design and delivery](android.md) alongside this review. Consider device lifecycle/permissions, intermittent connectivity, client/server version compatibility, durable signing and installation/update distribution. These concerns supplement the broad design lens without imposing a framework or provider.
+
 ## Shared agent adoption
 
 The canonical standard lives here. Factory `AGENTS.md` directs agents to it; Claude's thin `CLAUDE.md` entrypoint loads the shared rules. New app instructions include local co-architect responsibilities and a pinned reference in `ENGINEERING.md`. The selected client must actually read the relevant standard through a verified local source or its pinned reference; a Markdown link alone is not an import.
