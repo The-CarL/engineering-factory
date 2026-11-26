@@ -43,6 +43,17 @@ make check
 
 Factory checks establish offline behavior. Accept the environment capabilities actually claimed through authorized live evidence: relevant credential transports, repository operations, hosting operations and fresh-task continuation. App CI and workload behavior require their own evidence. Keep operator-specific targets and results private.
 
+## TODO: GitOps deployment for factory apps
+
+Build a reusable CI/CD feature that takes an existing, accessible app repository from its first reviewed PR to a verified deployment. The setup should work across AI clients, and releases should run in GitHub Actions after the coding session ends.
+
+- **Set up the factory once.** Establish GitHub Actions OIDC trust in AWS, encrypted and versioned Terraform state storage with locking and per-app/environment access, and a protected onboarding service. Give the service the authority to enroll approved repositories and deployment branches, configure scoped deployment roles, and set up provider access. Preserve the existing AWS account, personal-site and Forge infrastructure, protected DNS records, and the foundation itself.
+- **Automate access for each app.** Actions uses its job token for repository operations and OIDC for temporary AWS credentials. Keep persistent credentials in AWS Secrets Manager. For apps that use Vercel, enroll a provisioning credential once so the service can create projects and issue and renew project-scoped credentials. Before enrollment, verify that the provisioning identity's effective access excludes core projects, including if token issuance requires full-account scope. Keep the provisioning credential accessible only to the onboarding service. Deployment jobs can retrieve only their own approved secrets. Generate app credentials during provisioning where supported and scope runtime access separately.
+- **Design the rollout with Carlo.** Choose hosting, DNS, branch-to-environment mappings and delivery phases during app design. Default to `main` for production. Add a persistent `dev` environment or selected PR previews when useful. The agent prepares one or more reviewable PRs with app code, Terraform definitions and GitHub Actions workflows. Carlo reviews and merges from his phone.
+- **Deploy on merge.** After checks pass, the pipeline provisions the app's infrastructure, deploys the workload, and creates approved app DNS and certificate-validation records in the existing Route 53 zone. Verify HTTPS and the applicable end-to-end behavior. Record the deployed commit, provider resources and provenance in the app's records. Subsequent merges update the same resources. Define recovery for partial releases and keep destructive changes subject to [cleanup review](standards/cleanup.md).
+
+Acceptance requires a first deployment and a later PR-driven update with the coding session closed, without manual per-app secret entry, IAM setup or DNS console work.
+
 ## Operating references
 
 - [History and lessons](docs/history/README.md), [unresolved findings](docs/history/README.md#unresolved-and-deferred-work) and [design decisions](docs/design/README.md)
